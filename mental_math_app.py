@@ -6,6 +6,7 @@ import random
 # ==========================================
 MAX_LIMIT = 10**12  # 上限: 1兆
 MIN_LIMIT = 100     # 下限: 100
+TOTAL_QUESTIONS = 10 # 1セットの問題数
 
 # ==========================================
 # 共通関数：数値のフォーマットなど
@@ -13,31 +14,23 @@ MIN_LIMIT = 100     # 下限: 100
 def format_japanese_answer(num):
     """解答表示用のフォーマット（例: 1兆2000億円）"""
     int_num = int(num)
-    
-    if int_num == 0:
-        return "0"
-        
+    if int_num == 0: return "0"
     units = [(10**12, "兆"), (10**8, "億"), (10**4, "万"), (1, "")]
     result = []
     remaining = abs(int_num)
-    
     for unit_val, unit_name in units:
         if remaining >= unit_val:
             val = remaining // unit_val
             remaining %= unit_val
             result.append(f"{val:,}{unit_name}")
-            
     return "".join(result) if result else "0"
 
 def generate_random_number_with_unit():
     """金額用:「10億」や「3,000万」のような大きな数値を生成する"""
     base = random.randint(10, 9999) 
-    # 金額は「万」「億」になりやすい設定
     unit_type = random.choices(["", "万", "億"], weights=[1, 5, 4])[0]
-    
     val = 0
     label = ""
-
     if unit_type == "億":
         val = base * (10**8)
         label = f"{base:,}億"
@@ -47,15 +40,12 @@ def generate_random_number_with_unit():
     else:
         val = base * 100 
         label = f"{val:,}"
-        
     return val, label
 
 def generate_random_count():
     """数量・人数用: 巨大になりすぎない数値を生成する（億は出さない）"""
     base = random.randint(1, 9999)
-    # 数量は「単位なし」を多くし、「億」は出さない
     unit_type = random.choices(["", "万"], weights=[8, 2])[0]
-    
     if unit_type == "万":
         val = base * 10000
         label = f"{base:,}万"
@@ -65,104 +55,200 @@ def generate_random_count():
     return val, label
 
 # ==========================================
+# ゲーム進行管理用関数
+# ==========================================
+def init_game_state():
+    """ゲームの進行状態を初期化"""
+    st.session_state.current_q_idx = 1      # 現在の問題数
+    st.session_state.score = 0              # 正解数
+    st.session_state.game_finished = False  # 終了フラグ
+    # 個別の問題データもクリア
+    st.session_state.train_active = False
+    st.session_state.quiz_data = None
+    st.session_state.quiz_answered = False
+
+def next_question():
+    """次の問題へ進む処理"""
+    if st.session_state.current_q_idx >= TOTAL_QUESTIONS:
+        st.session_state.game_finished = True
+    else:
+        st.session_state.current_q_idx += 1
+        # 次の問題生成のためにフラグをリセット
+        st.session_state.train_active = False
+        st.session_state.quiz_data = None
+        st.session_state.quiz_answered = False
+
+# ==========================================
 # モード1：従来のトレーニング（入力式）
 # ==========================================
 def mode_training():
     st.header("💪 概算入力トレーニング")
-    st.caption("桁の感覚を養うため、計算結果の数値を入力してください。")
     
-    if st.button("トップに戻る"):
+    # リザルト画面
+    if st.session_state.game_finished:
+        st.success(f"お疲れ様でした！ 全{TOTAL_QUESTIONS}問終了です。")
+        st.metric("最終スコア", f"{st.session_state.score} / {TOTAL_QUESTIONS} 問正解")
+        
+        # 評価コメント
+        rate = st.session_state.score
+        if rate >= 9:
+            st.markdown("### 🏆 評価: S (神レベル)")
+            st.write("完璧な桁感覚です！ビジネスの現場でも即戦力でしょう。")
+        elif rate >= 7:
+            st.markdown("### 🥇 評価: A (上級者)")
+            st.write("かなり正確です。自信を持ってください。")
+        elif rate >= 4:
+            st.markdown("### 🥈 評価: B (普通)")
+            st.write("まずまずの感覚です。さらに精度を高めましょう。")
+        else:
+            st.markdown("### 🥉 評価: C (修行中)")
+            st.write("桁の読み間違いに注意しましょう。練習あるのみ！")
+            
+        st.divider()
+        c1, c2 = st.columns(2)
+        if c1.button("もう一度挑戦", type="primary"):
+            init_game_state()
+            st.rerun()
+        if c2.button("トップに戻る"):
+            st.session_state.page = "home"
+            st.rerun()
+        return # ここで処理終了
+
+    # --- ゲーム進行中 ---
+    # 進捗バー
+    progress = st.session_state.current_q_idx / TOTAL_QUESTIONS
+    st.progress(progress)
+    st.caption(f"第 {st.session_state.current_q_idx} 問 / 全 {TOTAL_QUESTIONS} 問 （現在の正解数: {st.session_state.score}）")
+    
+    if st.button("トップに戻る（中断）"):
         st.session_state.page = "home"
         st.rerun()
 
-    if 'train_num1' not in st.session_state:
-        st.session_state.train_num1 = 0
-        st.session_state.train_num2 = 0
-        st.session_state.train_active = False
-
-    def generate_train_problem():
+    # 問題生成ロジック
+    if not st.session_state.train_active:
         while True:
-            # トレーニングモードは桁数指定なのでそのままでOKだが
-            # バランス調整のため少し範囲を広げる
             digit_range1 = random.randint(3, 9)
             digit_range2 = random.randint(2, 6)
-            
             num1 = random.randint(10**(digit_range1-1), 10**digit_range1)
             num2 = random.randint(10**(digit_range2-1), 10**digit_range2)
-            
             ans = num1 * num2
-            
             if ans <= MAX_LIMIT:
                 st.session_state.train_num1 = num1
                 st.session_state.train_num2 = num2
                 st.session_state.train_active = True
+                # 入力欄リセットのためキーを変更するテクニック用にIDを生成してもよいが、
+                # 今回はシンプルに rerun で値をリセットさせる
                 break
 
-    if st.button("新しい問題を出題", type="primary"):
-        generate_train_problem()
-
-    if st.session_state.train_active:
-        st.markdown("### 【問題】")
-        c1, c2, c3 = st.columns([2, 0.5, 2])
-        with c1: st.metric("数値 A", f"{st.session_state.train_num1:,}")
-        with c2: st.markdown("## ×")
-        with c3: st.metric("数値 B", f"{st.session_state.train_num2:,}")
-        
-        st.divider()
-        user_ans = st.number_input("概算解答を入力", value=0.0, step=10000.0, format="%.0f")
-        
+    st.markdown("### 【問題】")
+    c1, c2, c3 = st.columns([2, 0.5, 2])
+    with c1: st.metric("数値 A", f"{st.session_state.train_num1:,}")
+    with c2: st.markdown("## ×")
+    with c3: st.metric("数値 B", f"{st.session_state.train_num2:,}")
+    
+    st.divider()
+    
+    # キーにindexを含めて入力値をリセットさせる
+    user_ans = st.number_input(
+        "概算解答を入力", 
+        value=0.0, 
+        step=10000.0, 
+        format="%.0f", 
+        key=f"train_ans_{st.session_state.current_q_idx}"
+    )
+    
+    # まだ回答していない場合
+    if not st.session_state.quiz_answered:
         if st.button("答え合わせ"):
-            ans = st.session_state.train_num1 * st.session_state.train_num2
-            diff_pct = ((user_ans - ans) / ans * 100) if ans != 0 else 0
+            st.session_state.quiz_answered = True # 回答済みフラグを立てる（UI表示用）
+            st.rerun()
             
-            st.info(f"🧮 計算イメージ: {st.session_state.train_num1:,.0f} × {st.session_state.train_num2:,.0f} = {ans:,.0f}")
-            st.write(f"正解: **{format_japanese_answer(ans)}**")
-            
-            if abs(diff_pct) <= 20:
-                st.success(f"素晴らしい！ ズレは {diff_pct:.1f}% です。")
-            elif abs(diff_pct) > 100:
-                st.error(f"桁が違います。 ズレ: {diff_pct:.1f}%")
-            else:
-                st.warning(f"おしい！ ズレ: {diff_pct:.1f}%")
+    else:
+        # 回答後の表示
+        ans = st.session_state.train_num1 * st.session_state.train_num2
+        diff_pct = ((user_ans - ans) / ans * 100) if ans != 0 else 0
+        
+        st.info(f"🧮 計算イメージ: {st.session_state.train_num1:,.0f} × {st.session_state.train_num2:,.0f} = {ans:,.0f}")
+        st.write(f"正解: **{format_japanese_answer(ans)}**")
+        
+        is_correct = False
+        if abs(diff_pct) <= 20:
+            st.success(f"正解！ (ズレ: {diff_pct:.1f}%)")
+            is_correct = True
+        elif abs(diff_pct) > 100:
+            st.error(f"不正解... 桁が違います (ズレ: {diff_pct:.1f}%)")
+        else:
+            st.warning(f"不正解... おしい！ (ズレ: {diff_pct:.1f}%)")
+
+        # 「次へ」ボタンが押されたらスコア加算して次へ
+        if st.button("次の問題へ", type="primary"):
+            if is_correct:
+                st.session_state.score += 1
+            next_question()
+            st.rerun()
 
 # ==========================================
 # モード2：新しいクイズ（4択・ビジネス文章問題）
 # ==========================================
 def mode_quiz():
     st.header("🧩 ビジネス概算クイズ")
-    st.caption("表示されるビジネスシーンの数字を概算し、正しい答えを選んでください。")
+    
+    # リザルト画面
+    if st.session_state.game_finished:
+        st.success(f"お疲れ様でした！ 全{TOTAL_QUESTIONS}問終了です。")
+        st.metric("最終スコア", f"{st.session_state.score} / {TOTAL_QUESTIONS} 問正解")
+        
+        # 評価コメント
+        rate = st.session_state.score
+        if rate >= 9:
+            st.markdown("### 🏆 評価: CEO級")
+            st.write("圧倒的な数字力です。経営判断も任せられそうです！")
+        elif rate >= 7:
+            st.markdown("### 🥇 評価: 部長級")
+            st.write("安定した数字感覚を持っています。素晴らしい！")
+        elif rate >= 4:
+            st.markdown("### 🥈 評価: 課長級")
+            st.write("基礎はできています。さらにスピードと精度を磨きましょう。")
+        else:
+            st.markdown("### 🥉 評価: 新人級")
+            st.write("まずは桁（万、億、兆）の関係を体に染み込ませましょう。")
 
-    if st.button("トップに戻る"):
+        st.divider()
+        c1, c2 = st.columns(2)
+        if c1.button("もう一度挑戦", type="primary"):
+            init_game_state()
+            st.rerun()
+        if c2.button("トップに戻る"):
+            st.session_state.page = "home"
+            st.rerun()
+        return
+
+    # --- ゲーム進行中 ---
+    progress = st.session_state.current_q_idx / TOTAL_QUESTIONS
+    st.progress(progress)
+    st.caption(f"第 {st.session_state.current_q_idx} 問 / 全 {TOTAL_QUESTIONS} 問 （現在の正解数: {st.session_state.score}）")
+
+    if st.button("トップに戻る（中断）"):
         st.session_state.page = "home"
         st.rerun()
 
-    if 'quiz_data' not in st.session_state:
-        st.session_state.quiz_data = None
-        st.session_state.quiz_answered = False
-
-    def generate_quiz():
+    if st.session_state.quiz_data is None:
         while True:
             pattern = random.choice([1, 2, 3])
-            
-            # 数値生成ロジックの適正化
-            # val1: 金額など（大きくてもよい）
             val1, label1 = generate_random_number_with_unit()
             
-            # val2: 個数・人数など（大きすぎると掛け算でオーバーフローするので調整）
             if pattern in [1, 3]:
-                val2, label2 = generate_random_count() # ここで「億」を出さない関数を使う
+                val2, label2 = generate_random_count()
             else:
-                val2, label2 = generate_random_number_with_unit() # パターン2では使わないが念のため
+                val2, label2 = generate_random_number_with_unit()
 
-            # %の生成
             pct_num = random.choice([10, 20, 30, 40, 50, 5, 15, 25])
             pct_val = pct_num / 100.0
             
             question_text = ""
             correct_val = 0
             
-            # --- ビジネス文章のテンプレート ---
-            if pattern == 1: # 金額 × 数量
+            if pattern == 1:
                 templates = [
                     f"単価 **{label1}円** の商品が **{label2}個** 売れました。売上はいくら？",
                     f"1人あたり **{label1}円** のコストがかかる研修に **{label2}人** が参加します。総費用は？",
@@ -172,7 +258,7 @@ def mode_quiz():
                 question_text = random.choice(templates)
                 correct_val = val1 * val2
                 
-            elif pattern == 2: # 金額 × %
+            elif pattern == 2:
                 templates = [
                     f"売上高 **{label1}円** に対して、営業利益率は **{pct_num}%** です。営業利益は？",
                     f"市場規模 **{label1}円** の業界で、シェア **{pct_num}%** を獲得しました。自社の売上は？",
@@ -182,7 +268,7 @@ def mode_quiz():
                 question_text = random.choice(templates)
                 correct_val = val1 * pct_val
                 
-            elif pattern == 3: # 金額 × 数量 × %
+            elif pattern == 3:
                 templates = [
                     f"単価 **{label1}円** の商品を **{label2}個** 販売し、利益率は **{pct_num}%** でした。利益額は？",
                     f"客単価 **{label1}円** で **{label2}人** が来店し、原価率は **{pct_num}%** です。原価の総額は？",
@@ -191,13 +277,11 @@ def mode_quiz():
                 question_text = random.choice(templates)
                 correct_val = val1 * val2 * pct_val
             
-            # 条件チェック
             if MIN_LIMIT <= correct_val <= MAX_LIMIT: 
                 break
 
-        # --- 選択肢の生成ロジック ---
         options = []
-        options.append(correct_val) # 正解
+        options.append(correct_val)
 
         if pattern == 2:
             opt_minus_20 = correct_val * 0.8
@@ -207,7 +291,6 @@ def mode_quiz():
         else:
             options.append(correct_val * 10) 
             options.append(correct_val / 10) 
-            
             if correct_val * 100 > MAX_LIMIT * 10:
                 options.append(correct_val / 100)
             else:
@@ -226,32 +309,32 @@ def mode_quiz():
         }
         st.session_state.quiz_answered = False
 
-    if st.session_state.quiz_data is None:
-        generate_quiz()
-
     q = st.session_state.quiz_data
     
-    st.markdown("### 問題")
+    st.markdown("### 【問題】")
     st.markdown(f"##### {q['q_text']}")
-    
     st.write("")
 
+    # --- 回答ボタンエリア ---
     if not st.session_state.quiz_answered:
         col1, col2 = st.columns(2)
         for i, opt in enumerate(q['options']):
             btn_label = format_japanese_answer(opt)
             target_col = col1 if i % 2 == 0 else col2
             
-            if target_col.button(f"{btn_label}", key=f"opt_{i}", use_container_width=True):
+            # 押されたらその値を保存して画面更新
+            if target_col.button(f"{btn_label}", key=f"q_{st.session_state.current_q_idx}_opt_{i}", use_container_width=True):
                 st.session_state.quiz_answered = True
                 st.session_state.user_choice = opt
                 st.rerun()
     
     else:
+        # --- 結果表示エリア ---
         user_val = st.session_state.user_choice
         correct_val = q['correct']
         pattern_used = q.get('pattern', 1)
         
+        # 計算過程文字列
         calc_str = ""
         v1 = q['raw_val1']
         v2 = q['raw_val2']
@@ -264,17 +347,23 @@ def mode_quiz():
         elif pattern_used == 3:
             calc_str = f"{v1:,.0f} × {v2:,.0f} × {pct}% = {correct_val:,.0f}"
 
+        # 正誤判定
         ratio = user_val / correct_val if correct_val != 0 else 0
+        is_correct = False
         
         if 0.99 <= ratio <= 1.01: 
-            st.success("🎉 正解！ お見事です。")
+            st.success("🎉 正解！")
+            is_correct = True
         else:
             st.error(f"❌ 残念... 正解は 「{format_japanese_answer(correct_val)}」 でした。")
         
         st.info(f"🧮 計算イメージ:\n{calc_str}")
 
         if st.button("次の問題へ", type="primary"):
-            generate_quiz()
+            # 正解ならスコアを加算してから次へ
+            if is_correct:
+                st.session_state.score += 1
+            next_question()
             st.rerun()
 
 # ==========================================
@@ -285,28 +374,33 @@ def main():
     
     if 'page' not in st.session_state:
         st.session_state.page = "home"
+    
+    # 状態変数の初期化確認（なければ作成）
+    if 'current_q_idx' not in st.session_state:
+        init_game_state()
 
     if st.session_state.page == "home":
         st.title("💼 ビジネス数字力道場")
         st.markdown("ビジネスに必要な「数字の規模感」と「暗算力」を鍛えるアプリです。")
         
         st.divider()
-        
         col1, col2 = st.columns(2)
         
         with col1:
             st.info("📊 ストイックに練習")
             if st.button("概算トレーニング\n(入力式)", use_container_width=True):
+                init_game_state() # ゲーム開始時に初期化
                 st.session_state.page = "training"
                 st.rerun()
-            st.caption("単純な計算式で、桁の感覚と入力精度を鍛えます。")
+            st.caption("10問セットで精度を測定します。誤差20%以内を目指してください。")
 
         with col2:
             st.success("🧩 ビジネス概算クイズ")
             if st.button("シナリオ形式\n(4択式)", use_container_width=True):
+                init_game_state() # ゲーム開始時に初期化
                 st.session_state.page = "quiz"
                 st.rerun()
-            st.caption("「売上」「コスト」「利益」などの具体的シーンで概算力を試します。")
+            st.caption("10問セットのクイズです。具体的なビジネスシーンで桁感を試します。")
 
         st.divider()
         st.subheader("📚 おすすめの学習資料")
