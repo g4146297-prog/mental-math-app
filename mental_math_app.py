@@ -30,8 +30,9 @@ def format_japanese_answer(num):
     return "".join(result) if result else "0"
 
 def generate_random_number_with_unit():
-    """「10億円」や「8千」のような表記と実数値を生成する"""
-    base = random.randint(10, 999) 
+    """「10億」や「3,000万」のような表記と実数値を生成する（単位文字はつけない）"""
+    # 3桁〜4桁の数字が出るように範囲を拡大（10〜9999）
+    base = random.randint(10, 9999) 
     unit_type = random.choices(["", "万", "億"], weights=[1, 5, 4])[0]
     
     val = 0
@@ -39,13 +40,14 @@ def generate_random_number_with_unit():
 
     if unit_type == "億":
         val = base * (10**8)
-        label = f"{base}億"
+        label = f"{base:,}億" # カンマを追加
     elif unit_type == "万":
         val = base * (10**4)
-        label = f"{base}万"
+        label = f"{base:,}万" # カンマを追加
     else:
+        # 単位なしの場合は数千〜数十万のイメージ
         val = base * 100 
-        label = f"{base}00"
+        label = f"{val:,}"   # カンマを追加
         
     return val, label
 
@@ -108,11 +110,11 @@ def mode_training():
                 st.warning(f"おしい！ ズレ: {diff_pct:.1f}%")
 
 # ==========================================
-# モード2：新しいクイズ（4択・桁数問題）
+# モード2：新しいクイズ（4択・ビジネス文章問題）
 # ==========================================
 def mode_quiz():
-    st.header("🧩 桁数直感クイズ")
-    st.caption("正しい答えを選んでください。")
+    st.header("🧩 ビジネス概算クイズ")
+    st.caption("表示されるビジネスシーンの数字を概算し、正しい答えを選んでください。")
 
     if st.button("トップに戻る"):
         st.session_state.page = "home"
@@ -138,46 +140,59 @@ def mode_quiz():
             question_text = ""
             correct_val = 0
             
-            if pattern == 1: # 数値 x 数値
-                label2 += random.choice(["個", "円", "人"])
-                question_text = f"{label1} × {label2}"
+            # --- ビジネス文章のテンプレート ---
+            if pattern == 1:
+                templates = [
+                    f"単価 **{label1}円** の商品が **{label2}個** 売れました。売上はいくら？",
+                    f"1人あたり **{label1}円** のコストがかかる研修に **{label2}人** が参加します。総費用は？",
+                    f"月商 **{label1}円** の店舗を **{label2}店舗** 運営しています。全店の月商合計は？",
+                    f"契約単価 **{label1}円** のサブスク会員が **{label2}人** います。毎月の売上は？"
+                ]
+                question_text = random.choice(templates)
                 correct_val = val1 * val2
                 
-            elif pattern == 2: # 数値 x %
-                question_text = f"{label1}円 × {pct_num}%"
+            elif pattern == 2:
+                templates = [
+                    f"売上高 **{label1}円** に対して、営業利益率は **{pct_num}%** です。営業利益は？",
+                    f"市場規模 **{label1}円** の業界で、シェア **{pct_num}%** を獲得しました。自社の売上は？",
+                    f"予算 **{label1}円** のうち、すでに **{pct_num}%** を消化しました。消化した金額は？",
+                    f"投資額 **{label1}円** に対して、リターン（利回り）が **{pct_num}%** ありました。利益額は？"
+                ]
+                question_text = random.choice(templates)
                 correct_val = val1 * pct_val
                 
-            elif pattern == 3: # 数値 x 数値 x %
-                label2 += "個"
-                question_text = f"{label1}円 × {label2} × {pct_num}%"
+            elif pattern == 3:
+                templates = [
+                    f"単価 **{label1}円** の商品を **{label2}個** 販売し、利益率は **{pct_num}%** でした。利益額は？",
+                    f"客単価 **{label1}円** で **{label2}人** が来店し、原価率は **{pct_num}%** です。原価の総額は？",
+                    f"1件 **{label1}円** の案件が **{label2}件** あり、成約率は **{pct_num}%** でした。成約による売上合計は？"
+                ]
+                question_text = random.choice(templates)
                 correct_val = val1 * val2 * pct_val
             
             # 条件チェック
             if MIN_LIMIT <= correct_val <= MAX_LIMIT: 
                 break
 
-        # --- 選択肢の生成ロジック（パターンで分岐） ---
+        # --- 選択肢の生成ロジック ---
         options = []
         options.append(correct_val) # 正解
 
-        # パターン2（金額 * %）の場合は、桁ではなく「数値のズレ」でひっかける
+        # パターン2（金額 * %）の場合
         if pattern == 2:
-            # ±20%, ±40% などの近似値を生成
-            # intにキャストして端数を切り捨てることで、微妙にずれた整数を作る
             opt_minus_20 = correct_val * 0.8
             opt_plus_20  = correct_val * 1.2
-            opt_random   = correct_val * random.choice([0.6, 1.4, 1.5]) # もう一つは広めにずらす
+            opt_random   = correct_val * random.choice([0.6, 1.4, 1.5])
             
             options.append(opt_minus_20)
             options.append(opt_plus_20)
             options.append(opt_random)
         
-        # それ以外（パターン1, 3）は「桁のズレ」でひっかける
+        # それ以外
         else:
-            options.append(correct_val * 10) # 1桁大きい
-            options.append(correct_val / 10) # 1桁小さい
+            options.append(correct_val * 10) 
+            options.append(correct_val / 10) 
             
-            # 4つ目の選択肢（大きくなりすぎないよう調整）
             if correct_val * 100 > MAX_LIMIT * 10:
                 options.append(correct_val / 100)
             else:
@@ -189,7 +204,7 @@ def mode_quiz():
             "q_text": question_text,
             "correct": correct_val,
             "options": options,
-            "pattern": pattern # パターンも保存（デバッグ用などに便利）
+            "pattern": pattern
         }
         st.session_state.quiz_answered = False
 
@@ -199,7 +214,7 @@ def mode_quiz():
     q = st.session_state.quiz_data
     
     st.markdown("### 問題")
-    st.markdown(f"## {q['q_text']} = ?")
+    st.markdown(f"##### {q['q_text']}")
     
     st.write("")
 
@@ -219,8 +234,6 @@ def mode_quiz():
         correct_val = q['correct']
         pattern_used = q.get('pattern', 1)
 
-        # 判定（パターン2の場合は少し誤差を許容しないと厳しいが、選択肢ベースなので一致判定でOK）
-        # ただし浮動小数点の微妙なズレを考慮して比率で判定
         ratio = user_val / correct_val if correct_val != 0 else 0
         
         if 0.99 <= ratio <= 1.01: 
@@ -228,11 +241,10 @@ def mode_quiz():
         else:
             st.error(f"❌ 残念... 正解は 「{format_japanese_answer(correct_val)}」 でした。")
             
-            # 解説コメントの出し分け
             if pattern_used == 2:
-                st.caption("％の計算では、桁だけでなく具体的な数字の概算精度も問われます！")
+                st.caption("％の計算では、ざっくり2割増し・2割引きなどの感覚を掴みましょう。")
             else:
-                st.caption("桁の感覚を修正しましょう！コンマの位置をイメージして。")
+                st.caption("桁の感覚を修正しましょう！")
             
         if st.button("次の問題へ", type="primary"):
             generate_quiz()
@@ -260,14 +272,14 @@ def main():
             if st.button("概算トレーニング\n(入力式)", use_container_width=True):
                 st.session_state.page = "training"
                 st.rerun()
-            st.caption("以前からの機能です。正確な数字を入力して誤差を確認します。")
+            st.caption("単純な計算式で、桁の感覚と入力精度を鍛えます。")
 
         with col2:
-            st.success("🧩 クイズ形式で確認")
-            if st.button("桁数直感クイズ\n(4択式)", use_container_width=True):
+            st.success("🧩 ビジネス概算クイズ")
+            if st.button("シナリオ形式\n(4択式)", use_container_width=True):
                 st.session_state.page = "quiz"
                 st.rerun()
-            st.caption("新機能！「10億円×30%」などの計算結果を、正しい桁の選択肢から選びます。")
+            st.caption("「売上」「コスト」「利益」などの具体的シーンで概算力を試します。")
 
         st.divider()
         st.subheader("📚 おすすめの学習資料")
