@@ -138,9 +138,8 @@ def generate_random_count(simple=False):
         
     unit_type = random.choices(["", "万"], weights=[8, 2])[0]
     
-    # simpleモードの場合はあまり変な単位をつけない
     if unit_type == "万":
-        if simple and base < 100: # simpleなら 100万とかにする
+        if simple and base < 100:
              val = base * 10000
              label = f"{base:,}万"
         elif not simple:
@@ -198,7 +197,8 @@ def next_question():
 # モード1：トレーニング (通常 & 上級共通)
 # ==========================================
 def mode_training(advanced=False):
-    title = "💪 概算トレーニング（上級）" if advanced else "💪 概算トレーニング（基本）"
+    # タイトル変更: 入力式テスト
+    title = "💪 入力式テスト（上級編）" if advanced else "💪 入力式テスト（基礎編）"
     st.markdown(f"## {title}")
     
     if st.session_state.game_finished:
@@ -239,7 +239,7 @@ def mode_training(advanced=False):
         st.session_state.page = "home"
         st.rerun()
 
-    # --- 問題生成ロジック (クイズと同じく文章題を生成) ---
+    # --- 問題生成ロジック ---
     if not st.session_state.train_active:
         while True:
             # パターン決定
@@ -250,7 +250,7 @@ def mode_training(advanced=False):
                 else:
                     pattern = 3 # 3要素計算
             else:
-                # 基本: 簡単なパターンのみ(1, 2, 4)。3要素は出さない
+                # 基礎: 簡単なパターンのみ(1, 2, 4)
                 pattern = random.choice([1, 2, 4])
 
             # 数値生成 (simpleフラグで難易度調整)
@@ -259,14 +259,12 @@ def mode_training(advanced=False):
             val1, label1 = generate_random_number_with_unit(simple=is_simple)
             
             if pattern == 4:
-                # 年数
                 val2 = random.randint(3, 15)
                 label2 = f"{val2}年"
             elif pattern in [1, 3]:
-                # 個数
                 val2, label2 = generate_random_count(simple=is_simple)
             else:
-                val2, label2 = generate_random_number_with_unit(simple=is_simple) # ダミー
+                val2, label2 = generate_random_number_with_unit(simple=is_simple)
 
             # %生成
             if advanced:
@@ -279,7 +277,6 @@ def mode_training(advanced=False):
             question_text = ""
             correct_val = 0
             
-            # HTML(<b>)を使用
             if pattern == 1:
                 templates = [
                     f"単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れた。<br>売上推定値は？",
@@ -316,7 +313,6 @@ def mode_training(advanced=False):
                 question_text = random.choice(templates)
                 correct_val = val1 * val2
             
-            # データ保存 (トレーニング用)
             if MIN_LIMIT <= correct_val <= MAX_LIMIT: 
                 st.session_state.train_data = {
                     "q_text": question_text,
@@ -338,8 +334,6 @@ def mode_training(advanced=False):
     
     st.write("")
     
-    # 入力フィールド
-    # format="%d" で整数表示（指数表記回避）。step=1で整数入力。
     user_ans = st.number_input(
         "概算解答を入力", 
         value=0, 
@@ -355,8 +349,6 @@ def mode_training(advanced=False):
     else:
         correct_val = q['correct']
         pattern_used = q['pattern']
-        
-        # 計算過程
         v1 = q['raw_val1']
         v2 = q['raw_val2']
         pct = q['raw_pct']
@@ -366,10 +358,8 @@ def mode_training(advanced=False):
         elif pattern_used == 3: calc_str = f"{v1:,.0f} × {v2:,.0f} × {pct}% = {correct_val:,.0f}"
         elif pattern_used == 4: calc_str = f"{v1:,.0f} × {v2} = {correct_val:,.0f}"
 
-        # 得点計算
         points, diff_pct, is_perfect = calculate_score(user_ans, correct_val)
         
-        # あなたの回答（カンマ付き）を表示
         st.markdown(f"あなたの回答: **{user_ans:,}**")
 
         st.info(f"🧮 計算イメージ: {calc_str}")
@@ -395,7 +385,8 @@ def mode_training(advanced=False):
 # モード2：クイズ (通常 & 上級共通)
 # ==========================================
 def mode_quiz(advanced=False):
-    title = "🧩 ビジネス概算クイズ（上級）" if advanced else "🧩 ビジネス概算クイズ（４択式）"
+    # タイトル変更: 4択クイズ
+    title = "🧩 4択クイズ（上級編）" if advanced else "🧩 4択クイズ（基礎編）"
     st.markdown(f"## {title}")
     
     if st.session_state.game_finished:
@@ -436,10 +427,8 @@ def mode_quiz(advanced=False):
 
     if st.session_state.quiz_data is None:
         while True:
-            # 第1問〜第6問: 基礎編 [パターン1, 2, 4]
             if st.session_state.current_q_idx <= 6:
                 pattern = random.choice([1, 2, 4])
-            # 第7問〜第10問: 応用編 [パターン3]
             else:
                 pattern = 3
 
@@ -589,8 +578,9 @@ def mode_quiz(advanced=False):
 # メイン
 # ==========================================
 def main():
-    st.set_page_config(page_title="ビジネス数字力道場", page_icon="💼")
-    apply_custom_design() # ★CSS適用
+    # タイトル変更: ビジネス暗算道場
+    st.set_page_config(page_title="ビジネス暗算道場", page_icon="💼")
+    apply_custom_design()
     
     if 'page' not in st.session_state:
         st.session_state.page = "home"
@@ -598,8 +588,7 @@ def main():
         init_game_state()
 
     if st.session_state.page == "home":
-        # タイトル
-        st.markdown("<h1 style='text-align: center; color: #38BDF8; font-size: 3.5rem; text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);'>💼 ビジネス数字力道場</h1>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #38BDF8; font-size: 3.5rem; text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);'>💼 ビジネス暗算道場</h1>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: #94A3B8;'>Advance your mental math skills with professional tools.</p>", unsafe_allow_html=True)
         st.write("")
         st.write("")
@@ -608,31 +597,31 @@ def main():
         
         # col1: クイズ（4択）
         with col1:
-            st.success("🧩 ビジネス概算クイズ（４択式）")
-            # 通常モード
-            if st.button("シナリオ形式", use_container_width=True):
+            st.success("🧩 4択クイズ")
+            # 基礎編
+            if st.button("基礎編", key="quiz_basic_btn", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "quiz"
                 st.rerun()
-            # 上級モード
-            if st.button("シナリオ形式（上級）", use_container_width=True):
+            # 上級編
+            if st.button("上級編", key="quiz_adv_btn", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "quiz_advanced"
                 st.rerun()
-            st.caption("上級は5%刻みの選択肢＆詳細な%計算が出題されます。")
+            st.caption("4択で瞬時に判断する実戦モード。")
 
         # col2: トレーニング（入力）
         with col2:
-            st.info("📊 概算トレーニング（入力式）")
-            if st.button("概算トレーニング（基本）", use_container_width=True):
+            st.info("📊 入力式テスト")
+            if st.button("基礎編", key="train_basic_btn", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "training"
                 st.rerun()
-            if st.button("概算トレーニング（上級）", use_container_width=True):
+            if st.button("上級編", key="train_adv_btn", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "training_advanced"
                 st.rerun()
-            st.caption("誤差2%以内で満点。基本は丸い数字、上級は実戦的な数字。")
+            st.caption("誤差2%以内で満点。基礎は丸い数字、上級は実戦的。")
 
         st.write("")
         st.write("")
