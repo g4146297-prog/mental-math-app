@@ -2,103 +2,96 @@ import streamlit as st
 import random
 
 # ==========================================
-# デザイン設定 (CSS) - 案C: データ＆デジタル
+# デザイン設定 (CSS) - 案A: スマート＆モダン
 # ==========================================
 def apply_custom_design():
-    # 案C: 黒ベース & ネオンカラー & グリッド感
-    # 背景: 漆黒 / アクセント: シアン(青緑) & マゼンタ(赤紫)
+    # 案A: ダークモード & ネオンカラー
+    # 背景: ダークネイビー / アクセント: シアンブルー & ネオンイエロー
     custom_css = """
     <style>
-        /* 全体の背景色とフォント */
+        /* 全体の背景色 (ダークモード) */
         .stApp {
-            background-color: #050505; /* ほぼ真っ黒 */
-            color: #E0E0E0;
-            font-family: 'Roboto Mono', 'Courier New', monospace; /* 等幅フォント */
+            background-color: #0F172A; /* 深いネイビーグレー */
+            color: #F8FAFC; /* オフホワイト */
         }
         
-        /* ヘッダーの装飾 - デジタル感 */
+        /* ヘッダーの装飾 */
         h1, h2, h3 {
-            color: #00F0FF; /* ネオンシアン */
-            font-family: 'Orbitron', 'Roboto Mono', monospace;
-            text-transform: uppercase; /* 大文字統一 */
-            letter-spacing: 0.1em;
-            border-bottom: 2px solid #00F0FF; /* 下線 */
-            padding-bottom: 5px;
-            display: inline-block;
+            color: #38BDF8; /* シアンブルー */
+            font-family: "Roboto", "Helvetica Neue", sans-serif;
+            font-weight: 700;
+            letter-spacing: 0.05em;
         }
         
-        /* ボタンのデザイン (プライマリー) - サイバーパンク風 */
+        /* ボタンのデザイン (プライマリー) - グラデーション */
         div.stButton > button:first-child {
-            background-color: transparent;
-            color: #00F0FF;
-            border: 1px solid #00F0FF;
-            border-radius: 0px; /* 角ばらせる */
-            box-shadow: 0 0 5px #00F0FF;
-            font-family: 'Roboto Mono', monospace;
+            background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+            color: white;
+            border-radius: 4px; /* 角を少しシャープに */
+            border: none;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); /* 光るような影 */
             font-weight: bold;
-            transition: all 0.2s ease;
+            letter-spacing: 0.05em;
+            transition: all 0.2s ease-in-out;
         }
         div.stButton > button:first-child:hover {
-            background-color: #00F0FF;
-            color: #000;
-            box-shadow: 0 0 15px #00F0FF;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
         }
         
         /* 通常ボタン (セカンダリー) */
         div.stButton > button:nth-child(2) {
             background-color: transparent;
-            color: #FF0055; /* マゼンタ */
-            border: 1px solid #FF0055;
-            border-radius: 0px;
-            font-family: 'Roboto Mono', monospace;
+            color: #38BDF8;
+            border: 1px solid #38BDF8;
+            border-radius: 4px;
         }
         div.stButton > button:nth-child(2):hover {
-            background-color: rgba(255, 0, 85, 0.2);
-            box-shadow: 0 0 10px #FF0055;
+            background-color: rgba(56, 189, 248, 0.1);
         }
 
-        /* メトリクス (数字表示) - 電光掲示板風 */
+        /* メトリクス (数字表示) - ネオンイエローで強調 */
         [data-testid="stMetricValue"] {
-            color: #FF0055; /* ネオンマゼンタ */
-            font-family: 'Courier New', monospace;
+            color: #FACC15; /* ネオンイエロー */
+            font-family: 'Consolas', 'Monaco', monospace; /* プログラミングフォント */
             font-weight: bold;
-            text-shadow: 0 0 5px #FF0055;
+            text-shadow: 0 0 10px rgba(250, 204, 21, 0.3); /* 光彩効果 */
         }
         [data-testid="stMetricLabel"] {
-            color: #888;
-            font-size: 0.8em;
-            text-transform: uppercase;
+            color: #94A3B8;
         }
 
-        /* カード風コンテナ (HUD風) */
+        /* カード風コンテナ (近未来的なパネル) */
         .css-card {
-            background-color: #111;
-            border: 1px solid #333;
-            border-left: 3px solid #00F0FF;
+            background-color: #1E293B;
+            border-left: 4px solid #FACC15;
             padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             margin-bottom: 20px;
-            background-image: linear-gradient(0deg, transparent 24%, rgba(0, 240, 255, .05) 25%, rgba(0, 240, 255, .05) 26%, transparent 27%, transparent 74%, rgba(0, 240, 255, .05) 75%, rgba(0, 240, 255, .05) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(0, 240, 255, .05) 25%, rgba(0, 240, 255, .05) 26%, transparent 27%, transparent 74%, rgba(0, 240, 255, .05) 75%, rgba(0, 240, 255, .05) 76%, transparent 77%, transparent);
-            background-size: 30px 30px; /* グリッド線 */
         }
         
-        /* info/successボックスのカスタマイズ */
+        /* info/successボックスのカスタマイズ (ダークテーマに合わせる) */
         .stAlert {
-            background-color: #0A0A0A;
-            border: 1px solid #444;
-            color: #EEE;
-            border-radius: 0px;
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            color: #E2E8F0;
         }
         
         /* プログレスバー */
         .stProgress > div > div > div > div {
-            background-color: #00F0FF;
-            border-radius: 0px;
+            background-color: #38BDF8;
+            box-shadow: 0 0 8px #38BDF8;
+        }
+        
+        /* 区切り線 */
+        hr {
+            border-color: #334155;
         }
         
         /* キャプション */
         .stCaption {
-            color: #666;
-            font-family: 'Roboto Mono', monospace;
+            color: #94A3B8;
         }
     </style>
     """
@@ -178,41 +171,42 @@ def next_question():
 # モード1：トレーニング
 # ==========================================
 def mode_training():
-    st.markdown("## >> SYSTEM: TRAINING_MODE")
+    st.markdown("## 💪 概算入力トレーニング")
     
     if st.session_state.game_finished:
+        # リザルトカード (CSSクラス適用)
         st.markdown(f"""
         <div class="css-card" style="text-align: center;">
-            <h3 style="color: #00F0FF; border:none;">SESSION TERMINATED</h3>
-            <p style="font-size: 24px; color: #FFF;">RESULT: <span style="color: #FF0055; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
+            <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
+            <p style="font-size: 24px; color: #E2E8F0;">SCORE: <span style="color: #FACC15; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
         </div>
         """, unsafe_allow_html=True)
         
         rate = st.session_state.score
         if rate >= 9:
-            st.success("STATUS: RANK S [GOD_MODE]")
+            st.success("🏆 評価: S (神レベル) - Perfect Calculation!")
         elif rate >= 7:
-            st.info("STATUS: RANK A [EXPERT]")
+            st.info("🥇 評価: A (上級者) - Excellent Work.")
         elif rate >= 4:
-            st.warning("STATUS: RANK B [NORMAL]")
+            st.warning("🥈 評価: B (普通) - Good Job.")
         else:
-            st.error("STATUS: RANK C [NOVICE]")
+            st.error("🥉 評価: C (修行中) - Keep Practice.")
             
         st.write("")
         c1, c2 = st.columns(2)
-        if c1.button("RETRY_SESSION", type="primary"):
+        if c1.button("もう一度挑戦", type="primary"):
             init_game_state()
             st.rerun()
-        if c2.button("RETURN_ROOT"):
+        if c2.button("トップに戻る"):
             st.session_state.page = "home"
             st.rerun()
         return
 
     progress = st.session_state.current_q_idx / TOTAL_QUESTIONS
     st.progress(progress)
-    st.caption(f"SEQ: {st.session_state.current_q_idx}/{TOTAL_QUESTIONS} | DATA_ACC: {st.session_state.score}")
+    st.caption(f"Q.{st.session_state.current_q_idx} / {TOTAL_QUESTIONS} | Score: {st.session_state.score}")
     
-    if st.button("ABORT (RETURN)"):
+    if st.button("トップに戻る（中断）"):
         st.session_state.page = "home"
         st.rerun()
 
@@ -229,18 +223,19 @@ def mode_training():
                 st.session_state.train_active = True
                 break
 
-    st.markdown("### >> INPUT_DATA")
+    st.markdown("### Question")
     # デザイン調整用コンテナ
-    st.markdown('<div class="css-card">', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([2, 0.5, 2])
-    with c1: st.metric("VAL_A", f"{st.session_state.train_num1:,}")
-    with c2: st.markdown("<h2 style='text-align: center; color: #444; border:none;'>×</h2>", unsafe_allow_html=True)
-    with c3: st.metric("VAL_B", f"{st.session_state.train_num2:,}")
-    st.markdown('</div>', unsafe_allow_html=True)
+    with st.container():
+        st.markdown('<div class="css-card">', unsafe_allow_html=True)
+        c1, c2, c3 = st.columns([2, 0.5, 2])
+        with c1: st.metric("数値 A", f"{st.session_state.train_num1:,}")
+        with c2: st.markdown("<h2 style='text-align: center; color: #64748B;'>×</h2>", unsafe_allow_html=True)
+        with c3: st.metric("数値 B", f"{st.session_state.train_num2:,}")
+        st.markdown('</div>', unsafe_allow_html=True)
     
     st.write("")
     user_ans = st.number_input(
-        "ENTER ESTIMATE:", 
+        "概算解答を入力", 
         value=0.0, 
         step=10000.0, 
         format="%.0f", 
@@ -248,24 +243,24 @@ def mode_training():
     )
     
     if not st.session_state.quiz_answered:
-        if st.button("EXECUTE_CHECK"):
+        if st.button("答え合わせ"):
             st.session_state.quiz_answered = True
             st.rerun()
     else:
         ans = st.session_state.train_num1 * st.session_state.train_num2
         diff_pct = ((user_ans - ans) / ans * 100) if ans != 0 else 0
         
-        st.info(f"CALC_LOG: {st.session_state.train_num1:,.0f} × {st.session_state.train_num2:,.0f} = {ans:,.0f}")
-        st.markdown(f"**TRUE_VAL:** <span style='font-size: 20px; color: #00F0FF; font-family: monospace;'>{format_japanese_answer(ans)}</span>", unsafe_allow_html=True)
+        st.info(f"🧮 計算イメージ: {st.session_state.train_num1:,.0f} × {st.session_state.train_num2:,.0f} = {ans:,.0f}")
+        st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(ans)}</span>", unsafe_allow_html=True)
         
         is_correct = False
         if abs(diff_pct) <= 20:
-            st.success(f"[OK] DIFF: {diff_pct:.1f}%")
+            st.success(f"⭕ 正解！ (ズレ: {diff_pct:.1f}%)")
             is_correct = True
         else:
-            st.error(f"[FAIL] DIFF: {diff_pct:.1f}%")
+            st.error(f"❌ 不正解... (ズレ: {diff_pct:.1f}%)")
 
-        if st.button("NEXT_SEQ >>", type="primary"):
+        if st.button("次の問題へ", type="primary"):
             if is_correct: st.session_state.score += 1
             next_question()
             st.rerun()
@@ -274,41 +269,41 @@ def mode_training():
 # モード2：クイズ
 # ==========================================
 def mode_quiz():
-    st.markdown("## >> SYSTEM: QUIZ_MODE")
+    st.markdown("## 🧩 ビジネス概算クイズ")
     
     if st.session_state.game_finished:
         st.markdown(f"""
         <div class="css-card" style="text-align: center;">
-            <h3 style="color: #00F0FF; border:none;">SESSION TERMINATED</h3>
-            <p style="font-size: 24px; color: #FFF;">RESULT: <span style="color: #FF0055; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
+            <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
+            <p style="font-size: 24px; color: #E2E8F0;">SCORE: <span style="color: #FACC15; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
         </div>
         """, unsafe_allow_html=True)
 
         rate = st.session_state.score
         if rate >= 9:
-            st.success("EVAL: CEO_CLASS [OPTIMAL]")
+            st.success("🏆 評価: CEO級 - 経営判断も任せられます！")
         elif rate >= 7:
-            st.info("EVAL: DIRECTOR_CLASS [HIGH]")
+            st.info("🥇 評価: 部長級 - 安定した数字力です。")
         elif rate >= 4:
-            st.warning("EVAL: MANAGER_CLASS [NORMAL]")
+            st.warning("🥈 評価: 課長級 - 基礎はできています。")
         else:
-            st.error("EVAL: NOVICE [LOW]")
+            st.error("🥉 評価: 新人級 - まずは単位を覚えましょう。")
         
         st.write("")
         c1, c2 = st.columns(2)
-        if c1.button("RETRY_SESSION", type="primary"):
+        if c1.button("もう一度挑戦", type="primary"):
             init_game_state()
             st.rerun()
-        if c2.button("RETURN_ROOT"):
+        if c2.button("トップに戻る"):
             st.session_state.page = "home"
             st.rerun()
         return
 
     progress = st.session_state.current_q_idx / TOTAL_QUESTIONS
     st.progress(progress)
-    st.caption(f"SEQ: {st.session_state.current_q_idx}/{TOTAL_QUESTIONS} | DATA_ACC: {st.session_state.score}")
+    st.caption(f"Q.{st.session_state.current_q_idx} / {TOTAL_QUESTIONS} | Score: {st.session_state.score}")
 
-    if st.button("ABORT (RETURN)"):
+    if st.button("トップに戻る（中断）"):
         st.session_state.page = "home"
         st.rerun()
 
@@ -329,27 +324,27 @@ def mode_quiz():
             
             if pattern == 1:
                 templates = [
-                    f"単価 **{label1}円** の商品が **{label2}個** 売れた。<br>売上推定値は？",
-                    f"1人あたり **{label1}円** のコスト発生。対象 **{label2}人**。<br>総費用推定値は？",
-                    f"月商 **{label1}円** の店舗を **{label2}店舗** 運営中。<br>全店月商合計は？",
-                    f"契約単価 **{label1}円** × サブスク会員 **{label2}人**。<br>月間売上は？"
+                    f"単価 **{label1}円** の商品が **{label2}個** 売れました。<br>売上はいくら？",
+                    f"1人あたり **{label1}円** のコストがかかる研修に **{label2}人** が参加します。<br>総費用は？",
+                    f"月商 **{label1}円** の店舗を **{label2}店舗** 運営しています。<br>全店の月商合計は？",
+                    f"契約単価 **{label1}円** のサブスク会員が **{label2}人** います。<br>毎月の売上は？"
                 ]
                 question_text = random.choice(templates)
                 correct_val = val1 * val2
             elif pattern == 2:
                 templates = [
-                    f"売上高 **{label1}円** 。営業利益率 **{pct_num}%** 。<br>営業利益は？",
-                    f"市場規模 **{label1}円** 。シェア **{pct_num}%** 獲得。<br>自社売上は？",
-                    f"予算 **{label1}円** 。進捗率 **{pct_num}%** 消化。<br>消化金額は？",
-                    f"投資額 **{label1}円** 。リターン率 **{pct_num}%** 。<br>利益額は？"
+                    f"売上高 **{label1}円** に対して、営業利益率は **{pct_num}%** です。<br>営業利益は？",
+                    f"市場規模 **{label1}円** の業界で、シェア **{pct_num}%** を獲得しました。<br>自社の売上は？",
+                    f"予算 **{label1}円** のうち、すでに **{pct_num}%** を消化しました。<br>消化した金額は？",
+                    f"投資額 **{label1}円** に対して、リターン（利回り）が **{pct_num}%** ありました。<br>利益額は？"
                 ]
                 question_text = random.choice(templates)
                 correct_val = val1 * pct_val
             elif pattern == 3:
                 templates = [
-                    f"単価 **{label1}円** × 販売数 **{label2}個** × 利益率 **{pct_num}%**。<br>利益額は？",
-                    f"客単価 **{label1}円** × 来店数 **{label2}人** × 原価率 **{pct_num}%**。<br>原価総額は？",
-                    f"案件単価 **{label1}円** × 件数 **{label2}件** × 成約率 **{pct_num}%**。<br>成約売上は？"
+                    f"単価 **{label1}円** の商品を **{label2}個** 販売し、利益率は **{pct_num}%** でした。<br>利益額は？",
+                    f"客単価 **{label1}円** で **{label2}人** が来店し、原価率は **{pct_num}%** です。<br>原価の総額は？",
+                    f"1件 **{label1}円** の案件が **{label2}件** あり、成約率は **{pct_num}%** でした。<br>成約による売上合計は？"
                 ]
                 question_text = random.choice(templates)
                 correct_val = val1 * val2 * pct_val
@@ -387,8 +382,8 @@ def mode_quiz():
     # 問題カード表示 (CSSクラス適用)
     st.markdown(f"""
     <div class="css-card">
-        <h3 style="margin-top:0; color: #00F0FF; border:none;">>> QUERY_DATA</h3>
-        <p style="font-size: 18px; line-height: 1.6; color: #EEE;">{q['q_text']}</p>
+        <h3 style="margin-top:0; color: #38BDF8;">Question</h3>
+        <p style="font-size: 18px; line-height: 1.6; color: #F1F5F9;">{q['q_text']}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -419,14 +414,14 @@ def mode_quiz():
         is_correct = False
         
         if 0.99 <= ratio <= 1.01: 
-            st.success("RESULT: [PASS] CORRECT")
+            st.success("🎉 正解！")
             is_correct = True
         else:
-            st.error(f"RESULT: [FAIL] TRUE_VAL = {format_japanese_answer(correct_val)}")
+            st.error(f"❌ 不正解... 正解は 「{format_japanese_answer(correct_val)}」")
         
-        st.info(f"CALC_LOG:\n{calc_str}")
+        st.info(f"🧮 計算イメージ:\n{calc_str}")
 
-        if st.button("NEXT_SEQ >>", type="primary"):
+        if st.button("次の問題へ", type="primary"):
             if is_correct: st.session_state.score += 1
             next_question()
             st.rerun()
@@ -435,7 +430,7 @@ def mode_quiz():
 # メイン
 # ==========================================
 def main():
-    st.set_page_config(page_title="BizMath_Dojo", page_icon="📟")
+    st.set_page_config(page_title="ビジネス数字力道場", page_icon="💼")
     apply_custom_design() # ★CSS適用
     
     if 'page' not in st.session_state:
@@ -444,36 +439,36 @@ def main():
         init_game_state()
 
     if st.session_state.page == "home":
-        st.markdown("<h1 style='text-align: center; border:none;'>BIZ_MATH_DOJO <span style='font-size:0.5em; color:#FF0055;'>v2.0</span></h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #888;'>NUMERIC SENSE OPTIMIZATION PROTOCOL</p>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #38BDF8;'>💼 ビジネス数字力道場</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #94A3B8;'>Advance your mental math skills with professional tools.</p>", unsafe_allow_html=True)
         st.write("")
         st.write("")
         
         col1, col2 = st.columns(2)
         with col1:
-            st.info(">> TRAINING_MODE")
-            if st.button("INIT_TRAINING\n[INPUT]", use_container_width=True):
+            st.info("📊 ストイックに練習")
+            if st.button("概算トレーニング\n(入力式)", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "training"
                 st.rerun()
-            st.caption("SEQ: 10 | TOLERANCE: 20%")
+            st.caption("10問セットの集中モード。")
         with col2:
-            st.success(">> QUIZ_MODE")
-            if st.button("INIT_SCENARIO\n[SELECT]", use_container_width=True):
+            st.success("🧩 ビジネス概算クイズ")
+            if st.button("シナリオ形式\n(4択式)", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "quiz"
                 st.rerun()
-            st.caption("SEQ: 10 | TYPE: 4-CHOICE")
+            st.caption("4択で瞬時に判断する実戦モード。")
 
         st.write("")
         st.write("")
         st.markdown("---")
-        st.subheader(">> REFERENCE_DATA")
+        st.subheader("📚 おすすめの学習資料")
         bk1, bk2 = st.columns(2)
         with bk1:
-            st.markdown("SRC: **Fermi Estimation** ([LINK](https://amazon.co.jp))")
+            st.markdown("Example: **外資系コンサルのフェルミ推定** ([Link](https://amazon.co.jp))")
         with bk2:
-            st.markdown("SRC: **Financial Analysis** ([LINK](https://amazon.co.jp))")
+            st.markdown("Example: **決算書の読み方** ([Link](https://amazon.co.jp))")
 
     elif st.session_state.page == "training":
         mode_training()
