@@ -2,27 +2,21 @@ import streamlit as st
 import random
 
 # ==========================================
-# デザイン設定 (CSS) - 案A改: スマート＆モダン（調整版）
+# デザイン設定 (CSS) - 案A改: スマート＆モダン
 # ==========================================
 def apply_custom_design():
-    # 案A改: ダークモード & 落ち着いたネオンカラー
     custom_css = """
     <style>
-        /* 全体の背景色 (ダークモード) */
         .stApp {
-            background-color: #0F172A; /* 深いネイビーグレー */
-            color: #F8FAFC; /* オフホワイト */
+            background-color: #0F172A;
+            color: #F8FAFC;
         }
-        
-        /* ヘッダーの装飾 */
         h1, h2, h3 {
-            color: #38BDF8; /* シアンブルー */
+            color: #38BDF8;
             font-family: "Roboto", "Helvetica Neue", sans-serif;
             font-weight: 700;
             letter-spacing: 0.05em;
         }
-        
-        /* ボタンのデザイン (プライマリー) - 発色を抑えた深い青 */
         div.stButton > button:first-child {
             background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
             color: white;
@@ -37,8 +31,6 @@ def apply_custom_design():
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6);
         }
-        
-        /* 通常ボタン (セカンダリー) */
         div.stButton > button:nth-child(2) {
             background-color: transparent;
             color: #38BDF8;
@@ -48,10 +40,8 @@ def apply_custom_design():
         div.stButton > button:nth-child(2):hover {
             background-color: rgba(56, 189, 248, 0.1);
         }
-
-        /* メトリクス (数字表示) - ネオンイエローで強調 */
         [data-testid="stMetricValue"] {
-            color: #FACC15; /* ネオンイエロー */
+            color: #FACC15;
             font-family: 'Consolas', 'Monaco', monospace;
             font-weight: bold;
             text-shadow: 0 0 10px rgba(250, 204, 21, 0.3);
@@ -59,8 +49,6 @@ def apply_custom_design():
         [data-testid="stMetricLabel"] {
             color: #94A3B8;
         }
-
-        /* カード風コンテナ */
         .css-card {
             background-color: #1E293B;
             border-left: 4px solid #FACC15;
@@ -69,26 +57,18 @@ def apply_custom_design():
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             margin-bottom: 20px;
         }
-        
-        /* info/successボックス */
         .stAlert {
             background-color: #1E293B;
             border: 1px solid #334155;
             color: #E2E8F0;
         }
-        
-        /* プログレスバー */
         .stProgress > div > div > div > div {
             background-color: #38BDF8;
             box-shadow: 0 0 8px #38BDF8;
         }
-        
-        /* 区切り線 */
         hr {
             border-color: #334155;
         }
-        
-        /* キャプション */
         .stCaption {
             color: #94A3B8;
         }
@@ -99,8 +79,8 @@ def apply_custom_design():
 # ==========================================
 # 定数設定
 # ==========================================
-MAX_LIMIT = 10**12  # 上限: 1兆
-MIN_LIMIT = 100     # 下限: 100
+MAX_LIMIT = 10**12
+MIN_LIMIT = 100
 TOTAL_QUESTIONS = 10
 
 # ==========================================
@@ -263,10 +243,11 @@ def mode_training():
             st.rerun()
 
 # ==========================================
-# モード2：クイズ
+# モード2：クイズ (通常 & 上級共通)
 # ==========================================
-def mode_quiz():
-    st.markdown("## 🧩 ビジネス概算クイズ")
+def mode_quiz(advanced=False):
+    title = "🧩 ビジネス概算クイズ（上級）" if advanced else "🧩 ビジネス概算クイズ（４択式）"
+    st.markdown(f"## {title}")
     
     if st.session_state.game_finished:
         st.markdown(f"""
@@ -313,13 +294,17 @@ def mode_quiz():
             else:
                 val2, label2 = generate_random_number_with_unit()
 
-            pct_num = random.choice([10, 20, 30, 40, 50, 5, 15, 25])
+            # --- 上級モードの変更点②: %は1%刻み ---
+            if advanced:
+                pct_num = random.randint(1, 99) # 1〜99%のランダム
+            else:
+                pct_num = random.choice([10, 20, 30, 40, 50, 5, 15, 25])
+            
             pct_val = pct_num / 100.0
             
             question_text = ""
             correct_val = 0
             
-            # HTML(<b>)を使用
             if pattern == 1:
                 templates = [
                     f"単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れた。<br>売上推定値は？",
@@ -352,18 +337,30 @@ def mode_quiz():
 
         options = []
         options.append(correct_val)
-        if pattern == 2:
-            opt_minus_20 = correct_val * 0.8
-            opt_plus_20  = correct_val * 1.2
-            opt_random   = correct_val * random.choice([0.6, 1.4, 1.5])
-            options.extend([opt_minus_20, opt_plus_20, opt_random])
+        
+        # --- 上級モードの変更点①: 全パターンで5%刻みの選択肢 ---
+        if advanced:
+            # 正解に対し、±5%, ±10%, ±15% の中からランダムに3つ選ぶ
+            # 係数を定義: 0.85 (-15%) ～ 1.15 (+15%)
+            multipliers = [0.85, 0.90, 0.95, 1.05, 1.10, 1.15]
+            selected_mults = random.sample(multipliers, 3)
+            for m in selected_mults:
+                options.append(correct_val * m)
         else:
-            options.append(correct_val * 10) 
-            options.append(correct_val / 10) 
-            if correct_val * 100 > MAX_LIMIT * 10:
-                options.append(correct_val / 100)
+            # 通常モードの選択肢生成
+            if pattern == 2:
+                opt_minus_20 = correct_val * 0.8
+                opt_plus_20  = correct_val * 1.2
+                opt_random   = correct_val * random.choice([0.6, 1.4, 1.5])
+                options.extend([opt_minus_20, opt_plus_20, opt_random])
             else:
-                options.append(random.choice([correct_val * 100, correct_val / 100]))
+                options.append(correct_val * 10) 
+                options.append(correct_val / 10) 
+                if correct_val * 100 > MAX_LIMIT * 10:
+                    options.append(correct_val / 100)
+                else:
+                    options.append(random.choice([correct_val * 100, correct_val / 100]))
+        
         random.shuffle(options)
         
         st.session_state.quiz_data = {
@@ -371,7 +368,8 @@ def mode_quiz():
             "correct": correct_val,
             "options": options,
             "pattern": pattern,
-            "raw_val1": val1, "raw_val2": val2, "raw_pct": pct_num
+            "raw_val1": val1, "raw_val2": val2, "raw_pct": pct_num,
+            "is_advanced": advanced
         }
         st.session_state.quiz_answered = False
 
@@ -410,6 +408,7 @@ def mode_quiz():
         ratio = user_val / correct_val if correct_val != 0 else 0
         is_correct = False
         
+        # 判定（上級でも選択肢ベースなので同じ判定ロジックでOK）
         if 0.99 <= ratio <= 1.01: 
             st.success("🎉 正解！")
             is_correct = True
@@ -442,17 +441,22 @@ def main():
         st.write("")
         st.write("")
         
-        # ★ここを入れ替えました
         col1, col2 = st.columns(2)
         
         # col1: クイズ（4択）
         with col1:
-            st.success("🧩 ビジネス概算クイズ")
-            if st.button("シナリオ形式\n(4択式)", use_container_width=True):
+            st.success("🧩 ビジネス概算クイズ（４択式）")
+            # 通常モード
+            if st.button("シナリオ形式", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "quiz"
                 st.rerun()
-            st.caption("4択で瞬時に判断する実戦モード。")
+            # 上級モード
+            if st.button("シナリオ形式（上級）", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "quiz_advanced"
+                st.rerun()
+            st.caption("上級は5%刻みの選択肢＆詳細な%計算が出題されます。")
 
         # col2: トレーニング（入力）
         with col2:
@@ -476,7 +480,9 @@ def main():
     elif st.session_state.page == "training":
         mode_training()
     elif st.session_state.page == "quiz":
-        mode_quiz()
+        mode_quiz(advanced=False)
+    elif st.session_state.page == "quiz_advanced":
+        mode_quiz(advanced=True)
 
 if __name__ == "__main__":
     main()
