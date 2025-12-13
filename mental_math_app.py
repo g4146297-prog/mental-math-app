@@ -115,7 +115,7 @@ def format_japanese_answer(num):
     return "".join(result) if result else "0"
 
 def format_number_with_unit_label(value):
-    """問題文表示用: 単位付き（例: 1.5万）"""
+    """基礎編用: 単位付きで丸めて表示（例: 1.5万）"""
     if value >= 10**8:
         if value % 10**8 == 0: return f"{value // 10**8:,}億"
         else: return f"{value / 10**8:.1f}億".replace(".0", "")
@@ -128,6 +128,7 @@ def format_number_with_unit_label(value):
 def get_random_val(min_val, max_val, simple=False):
     val = random.randint(min_val, max_val)
     if simple:
+        # 基礎編: キリの良い数字にする
         digits = len(str(val))
         if digits > 1:
             bases = [10, 20, 30, 40, 50, 60, 70, 80, 90, 15, 25, 12, 18]
@@ -166,6 +167,8 @@ SCENARIOS = [
 ]
 
 def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts=None, simple_pct=None):
+    # simple_amounts: Trueなら「丸めた数字」を表示 (基礎編)
+    # simple_amounts: Falseなら「正確な数字(カンマ区切り)」を表示 (上級編)
     if simple_amounts is None: simple_amounts = not is_advanced
     if simple_pct is None: simple_pct = not is_advanced
 
@@ -192,12 +195,21 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
         else:
             pct = random.randint(min_p, max_p)
     
-    label1 = format_number_with_unit_label(val1)
+    # ★修正点: 上級編(simple_amounts=False)の場合は、丸めずにカンマ区切りの正確な数値を表示
+    if simple_amounts:
+        label1 = format_number_with_unit_label(val1)
+    else:
+        label1 = f"{val1:,}"
+    
     label2 = ""
     suffix2 = scenario.get('suffix2', '')
     
     if pattern in [1, 3]:
-        label2 = format_number_with_unit_label(val2)
+        if simple_amounts:
+            label2 = format_number_with_unit_label(val2)
+        else:
+            label2 = f"{val2:,}"
+            
     elif pattern == 4:
         label2 = f"{val2}{suffix2}"
         
@@ -209,7 +221,6 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
 
     q_text = scenario['template'].format(label1=label1, label2=label2, pct=pct)
     
-    # 履歴保存用の単位情報など
     unit1 = scenario.get('unit1', '')
     unit2 = scenario.get('unit2', '')
     if pattern == 4: unit2 = suffix2
@@ -227,7 +238,6 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
 # タイマー表示 (JavaScript)
 # ==========================================
 def show_timer():
-    # リアルタイムで時間を表示するHTML/JSコンポーネント
     timer_html = """
     <div style="font-size:20px; color:#FACC15; font-weight:bold; margin-bottom:10px; font-family:monospace;">
         ⏱️ Time: <span id="time_display">0.0</span>s
@@ -278,7 +288,7 @@ def init_game_state():
     st.session_state.game_finished = False
     st.session_state.quiz_data = None
     st.session_state.quiz_answered = False
-    st.session_state.history = [] # 履歴保存用
+    st.session_state.history = []
 
 def next_question():
     if st.session_state.current_q_idx >= TOTAL_QUESTIONS:
@@ -297,7 +307,6 @@ def mode_training(advanced=False):
     st.markdown(f"## {title}")
     
     if st.session_state.game_finished:
-        # 結果発表画面
         mins = int(st.session_state.total_duration // 60)
         secs = int(st.session_state.total_duration % 60)
         
@@ -312,7 +321,6 @@ def mode_training(advanced=False):
         </div>
         """, unsafe_allow_html=True)
         
-        # 履歴の表示
         st.write("### 📝 結果詳細")
         for h in st.session_state.history:
             st.markdown(f"""
@@ -346,7 +354,6 @@ def mode_training(advanced=False):
         st.session_state.page = "home"
         st.rerun()
 
-    # 問題生成
     if st.session_state.quiz_data is None:
         force_p = None
         if advanced:
@@ -370,7 +377,6 @@ def mode_training(advanced=False):
     </div>
     """, unsafe_allow_html=True)
     
-    # タイマー表示 (回答済みの場合は表示しない)
     if not st.session_state.quiz_answered:
         show_timer()
     
@@ -387,48 +393,44 @@ def mode_training(advanced=False):
     
     if not st.session_state.quiz_answered:
         if st.button("答え合わせ"):
-            # 時間計測
             elapsed = time.time() - st.session_state.current_start_time
             st.session_state.total_duration += elapsed
-            st.session_state.current_q_time = elapsed # 今回の時間保持
+            st.session_state.current_q_time = elapsed
             st.session_state.quiz_answered = True
             st.rerun()
     else:
         correct_val = q['correct']
+        pattern_used = q['pattern']
         v1 = q['raw_val1']
         v2 = q['raw_val2']
         pct = q['raw_pct']
-        pat = q['pattern']
         u1 = q['unit1']
         u2 = q['unit2']
         
-        # === アラビア数字での計算式 (解説用) ===
         calc_str_arabic = ""
-        if pat == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
-        elif pat == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
-        elif pat == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
-        elif pat == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
+        if pattern_used == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
+        elif pattern_used == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
 
-        # === 漢数字での計算式 (履歴用) ===
+        # 履歴用（漢数字）
         f_v1 = format_japanese_answer(v1) + u1
-        f_ans = format_japanese_answer(correct_val) + "円" # 答えは円固定
+        f_ans = format_japanese_answer(correct_val) + "円"
         calc_str_kanji = ""
-        
-        if pat == 1: 
+        if pattern_used == 1: 
             f_v2 = format_japanese_answer(v2) + u2
             calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
-        elif pat == 2: 
+        elif pattern_used == 2: 
             calc_str_kanji = f"{f_v1} × {pct}% ＝ {f_ans}"
-        elif pat == 3: 
+        elif pattern_used == 3: 
             f_v2 = format_japanese_answer(v2) + u2
             calc_str_kanji = f"{f_v1} × {f_v2} × {pct}% ＝ {f_ans}"
-        elif pat == 4: 
+        elif pattern_used == 4: 
             f_v2 = f"{v2}{u2}"
             calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
 
         points, diff_pct, is_perfect = calculate_score(user_ans, correct_val)
         
-        # 履歴に追加 (まだ追加していなければ)
         if len(st.session_state.history) < st.session_state.current_q_idx:
             st.session_state.history.append({
                 "result_label": f"{points}点",
@@ -486,7 +488,6 @@ def mode_quiz(advanced=False):
         else:
             st.error("🥉 評価: 新人級 - まずは単位を覚えましょう。")
         
-        # 履歴の表示
         st.write("### 📝 結果詳細")
         for h in st.session_state.history:
             icon = "⭕" if h['is_correct'] else "❌"
@@ -567,7 +568,6 @@ def mode_quiz(advanced=False):
     </div>
     """, unsafe_allow_html=True)
 
-    # タイマー表示
     if not st.session_state.quiz_answered:
         show_timer()
 
@@ -595,18 +595,15 @@ def mode_quiz(advanced=False):
         u1 = q['unit1']
         u2 = q['unit2']
         
-        # === アラビア数字 (解説用) ===
         calc_str_arabic = ""
         if pat == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
         elif pat == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
         elif pat == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
         elif pat == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
 
-        # === 漢数字 (履歴用) ===
         f_v1 = format_japanese_answer(v1) + u1
         f_ans = format_japanese_answer(correct_val) + "円"
         calc_str_kanji = ""
-        
         if pat == 1: 
             f_v2 = format_japanese_answer(v2) + u2
             calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
@@ -622,7 +619,6 @@ def mode_quiz(advanced=False):
         ratio = user_val / correct_val if correct_val != 0 else 0
         is_correct = (0.99 <= ratio <= 1.01)
         
-        # 履歴に追加
         if len(st.session_state.history) < st.session_state.current_q_idx:
             st.session_state.history.append({
                 "is_correct": is_correct,
