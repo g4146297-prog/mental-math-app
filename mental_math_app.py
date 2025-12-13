@@ -31,7 +31,6 @@ def format_japanese_answer(num):
 
 def generate_random_number_with_unit():
     """「10億」や「3,000万」のような表記と実数値を生成する（単位文字はつけない）"""
-    # 3桁〜4桁の数字が出るように範囲を拡大（10〜9999）
     base = random.randint(10, 9999) 
     unit_type = random.choices(["", "万", "億"], weights=[1, 5, 4])[0]
     
@@ -40,14 +39,13 @@ def generate_random_number_with_unit():
 
     if unit_type == "億":
         val = base * (10**8)
-        label = f"{base:,}億" # カンマを追加
+        label = f"{base:,}億"
     elif unit_type == "万":
         val = base * (10**4)
-        label = f"{base:,}万" # カンマを追加
+        label = f"{base:,}万"
     else:
-        # 単位なしの場合は数千〜数十万のイメージ
         val = base * 100 
-        label = f"{val:,}"   # カンマを追加
+        label = f"{val:,}"
         
     return val, label
 
@@ -100,7 +98,10 @@ def mode_training():
             ans = st.session_state.train_num1 * st.session_state.train_num2
             diff_pct = ((user_ans - ans) / ans * 100) if ans != 0 else 0
             
-            st.write(f"正解: **{format_japanese_answer(ans)}** ({ans:,.0f})")
+            # トレーニングモードでも計算過程を表示
+            st.info(f"🧮 計算イメージ: {st.session_state.train_num1:,.0f} × {st.session_state.train_num2:,.0f} = {ans:,.0f}")
+            
+            st.write(f"正解: **{format_japanese_answer(ans)}**")
             
             if abs(diff_pct) <= 20:
                 st.success(f"素晴らしい！ ズレは {diff_pct:.1f}% です。")
@@ -178,17 +179,11 @@ def mode_quiz():
         options = []
         options.append(correct_val) # 正解
 
-        # パターン2（金額 * %）の場合
         if pattern == 2:
             opt_minus_20 = correct_val * 0.8
             opt_plus_20  = correct_val * 1.2
             opt_random   = correct_val * random.choice([0.6, 1.4, 1.5])
-            
-            options.append(opt_minus_20)
-            options.append(opt_plus_20)
-            options.append(opt_random)
-        
-        # それ以外
+            options.extend([opt_minus_20, opt_plus_20, opt_random])
         else:
             options.append(correct_val * 10) 
             options.append(correct_val / 10) 
@@ -200,11 +195,15 @@ def mode_quiz():
 
         random.shuffle(options)
         
+        # ★修正：計算過程表示のために生の値を保存しておく
         st.session_state.quiz_data = {
             "q_text": question_text,
             "correct": correct_val,
             "options": options,
-            "pattern": pattern
+            "pattern": pattern,
+            "raw_val1": val1,
+            "raw_val2": val2,
+            "raw_pct": pct_num
         }
         st.session_state.quiz_answered = False
 
@@ -233,19 +232,31 @@ def mode_quiz():
         user_val = st.session_state.user_choice
         correct_val = q['correct']
         pattern_used = q.get('pattern', 1)
+        
+        # --- ★追加：計算過程の文字列作成 ---
+        calc_str = ""
+        v1 = q['raw_val1']
+        v2 = q['raw_val2']
+        pct = q['raw_pct']
+        
+        if pattern_used == 1:
+            calc_str = f"{v1:,.0f} × {v2:,.0f} = {correct_val:,.0f}"
+        elif pattern_used == 2:
+            calc_str = f"{v1:,.0f} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 3:
+            calc_str = f"{v1:,.0f} × {v2:,.0f} × {pct}% = {correct_val:,.0f}"
 
+        # 判定
         ratio = user_val / correct_val if correct_val != 0 else 0
         
         if 0.99 <= ratio <= 1.01: 
             st.success("🎉 正解！ お見事です。")
         else:
             st.error(f"❌ 残念... 正解は 「{format_japanese_answer(correct_val)}」 でした。")
-            
-            if pattern_used == 2:
-                st.caption("％の計算では、ざっくり2割増し・2割引きなどの感覚を掴みましょう。")
-            else:
-                st.caption("桁の感覚を修正しましょう！")
-            
+        
+        # 計算過程を表示（アラビア数字のみ）
+        st.info(f"🧮 計算イメージ:\n{calc_str}")
+
         if st.button("次の問題へ", type="primary"):
             generate_quiz()
             st.rerun()
