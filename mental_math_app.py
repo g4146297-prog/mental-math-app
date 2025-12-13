@@ -2,96 +2,92 @@ import streamlit as st
 import random
 
 # ==========================================
-# デザイン設定 (CSS) - 案A: スマート＆モダン
+# デザイン設定 (CSS) - 案B: フレンドリー＆ライト
 # ==========================================
 def apply_custom_design():
-    # 案A: ダークモード & ネオンカラー
-    # 背景: ダークネイビー / アクセント: シアンブルー & ネオンイエロー
+    # 案B: 白ベース & パステルカラー
+    # 背景: アリスブルー / アクセント: ソフトブルー & コーラルピンク/オレンジ
     custom_css = """
     <style>
-        /* 全体の背景色 (ダークモード) */
+        /* 全体の背景色 */
         .stApp {
-            background-color: #0F172A; /* 深いネイビーグレー */
-            color: #F8FAFC; /* オフホワイト */
+            background-color: #F0F8FF; /* 非常に薄い水色 */
+            color: #576574; /* 柔らかいグレー */
         }
         
         /* ヘッダーの装飾 */
         h1, h2, h3 {
-            color: #38BDF8; /* シアンブルー */
-            font-family: "Roboto", "Helvetica Neue", sans-serif;
+            color: #0984E3; /* 親しみやすいブルー */
+            font-family: "Helvetica Neue", Arial, sans-serif;
             font-weight: 700;
-            letter-spacing: 0.05em;
         }
         
-        /* ボタンのデザイン (プライマリー) - グラデーション */
+        /* ボタンのデザイン (プライマリー) - 丸みを帯びた形状 */
         div.stButton > button:first-child {
-            background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+            background-color: #74B9FF; /* パステルブルー */
             color: white;
-            border-radius: 4px; /* 角を少しシャープに */
+            border-radius: 30px; /* カプセル型 */
             border: none;
-            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); /* 光るような影 */
+            box-shadow: 0 4px 10px rgba(116, 185, 255, 0.3);
             font-weight: bold;
-            letter-spacing: 0.05em;
-            transition: all 0.2s ease-in-out;
+            padding: 0.5rem 1.5rem;
+            transition: all 0.2s ease;
         }
         div.stButton > button:first-child:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+            background-color: #0984E3;
+            transform: scale(1.03);
+            box-shadow: 0 6px 15px rgba(9, 132, 227, 0.3);
         }
         
         /* 通常ボタン (セカンダリー) */
         div.stButton > button:nth-child(2) {
-            background-color: transparent;
-            color: #38BDF8;
-            border: 1px solid #38BDF8;
-            border-radius: 4px;
+            background-color: #FFFFFF;
+            color: #74B9FF;
+            border: 2px solid #74B9FF;
+            border-radius: 30px;
         }
         div.stButton > button:nth-child(2):hover {
-            background-color: rgba(56, 189, 248, 0.1);
+            background-color: #F0F8FF;
         }
 
-        /* メトリクス (数字表示) - ネオンイエローで強調 */
+        /* メトリクス (数字表示) - 温かみのある色 */
         [data-testid="stMetricValue"] {
-            color: #FACC15; /* ネオンイエロー */
-            font-family: 'Consolas', 'Monaco', monospace; /* プログラミングフォント */
-            font-weight: bold;
-            text-shadow: 0 0 10px rgba(250, 204, 21, 0.3); /* 光彩効果 */
+            color: #FF7675; /* パステルコーラル/オレンジ */
+            font-family: sans-serif;
+            font-weight: 800;
         }
         [data-testid="stMetricLabel"] {
-            color: #94A3B8;
+            color: #B2BEC3;
         }
 
-        /* カード風コンテナ (近未来的なパネル) */
+        /* カード風コンテナ (ポップで浮いている感じ) */
         .css-card {
-            background-color: #1E293B;
-            border-left: 4px solid #FACC15;
-            padding: 20px;
-            border-radius: 6px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            background-color: #FFFFFF;
+            padding: 25px;
+            border-radius: 20px; /* 角丸を大きく */
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05); /* ふわっとした影 */
             margin-bottom: 20px;
+            border: 2px solid #E1E8EE;
         }
         
-        /* info/successボックスのカスタマイズ (ダークテーマに合わせる) */
+        /* info/successボックスのカスタマイズ */
         .stAlert {
-            background-color: #1E293B;
-            border: 1px solid #334155;
-            color: #E2E8F0;
+            background-color: #FFFFFF;
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
         }
         
         /* プログレスバー */
         .stProgress > div > div > div > div {
-            background-color: #38BDF8;
-            box-shadow: 0 0 8px #38BDF8;
-        }
-        
-        /* 区切り線 */
-        hr {
-            border-color: #334155;
+            background-color: #FF7675; /* コーラルピンクで進捗表示 */
+            border-radius: 10px;
         }
         
         /* キャプション */
         .stCaption {
-            color: #94A3B8;
+            color: #636E72;
+            font-weight: 500;
         }
     </style>
     """
@@ -174,23 +170,23 @@ def mode_training():
     st.markdown("## 💪 概算入力トレーニング")
     
     if st.session_state.game_finished:
-        # リザルトカード (CSSクラス適用)
+        # リザルトカード
         st.markdown(f"""
         <div class="css-card" style="text-align: center;">
-            <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
-            <p style="font-size: 24px; color: #E2E8F0;">SCORE: <span style="color: #FACC15; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
+            <h3 style="color: #0984E3;">Good Job!</h3>
+            <p style="font-size: 24px; color: #636E72;">SCORE: <span style="color: #FF7675; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
         </div>
         """, unsafe_allow_html=True)
         
         rate = st.session_state.score
         if rate >= 9:
-            st.success("🏆 評価: S (神レベル) - Perfect Calculation!")
+            st.success("🏆 評価: S (神レベル) - すごい！完璧です！")
         elif rate >= 7:
-            st.info("🥇 評価: A (上級者) - Excellent Work.")
+            st.info("🥇 評価: A (上級者) - さすがです！")
         elif rate >= 4:
-            st.warning("🥈 評価: B (普通) - Good Job.")
+            st.warning("🥈 評価: B (普通) - いい感じです！")
         else:
-            st.error("🥉 評価: C (修行中) - Keep Practice.")
+            st.error("🥉 評価: C (修行中) - ドンマイ！次いこう！")
             
         st.write("")
         c1, c2 = st.columns(2)
@@ -225,13 +221,12 @@ def mode_training():
 
     st.markdown("### Question")
     # デザイン調整用コンテナ
-    with st.container():
-        st.markdown('<div class="css-card">', unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([2, 0.5, 2])
-        with c1: st.metric("数値 A", f"{st.session_state.train_num1:,}")
-        with c2: st.markdown("<h2 style='text-align: center; color: #64748B;'>×</h2>", unsafe_allow_html=True)
-        with c3: st.metric("数値 B", f"{st.session_state.train_num2:,}")
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="css-card">', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([2, 0.5, 2])
+    with c1: st.metric("数値 A", f"{st.session_state.train_num1:,}")
+    with c2: st.markdown("<h2 style='text-align: center; color: #B2BEC3;'>×</h2>", unsafe_allow_html=True)
+    with c3: st.metric("数値 B", f"{st.session_state.train_num2:,}")
+    st.markdown('</div>', unsafe_allow_html=True)
     
     st.write("")
     user_ans = st.number_input(
@@ -251,7 +246,7 @@ def mode_training():
         diff_pct = ((user_ans - ans) / ans * 100) if ans != 0 else 0
         
         st.info(f"🧮 計算イメージ: {st.session_state.train_num1:,.0f} × {st.session_state.train_num2:,.0f} = {ans:,.0f}")
-        st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(ans)}</span>", unsafe_allow_html=True)
+        st.markdown(f"**正解:** <span style='font-size: 20px; color: #FF7675;'>{format_japanese_answer(ans)}</span>", unsafe_allow_html=True)
         
         is_correct = False
         if abs(diff_pct) <= 20:
@@ -274,20 +269,20 @@ def mode_quiz():
     if st.session_state.game_finished:
         st.markdown(f"""
         <div class="css-card" style="text-align: center;">
-            <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
-            <p style="font-size: 24px; color: #E2E8F0;">SCORE: <span style="color: #FACC15; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
+            <h3 style="color: #0984E3;">Finished!</h3>
+            <p style="font-size: 24px; color: #636E72;">SCORE: <span style="color: #FF7675; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
         </div>
         """, unsafe_allow_html=True)
 
         rate = st.session_state.score
         if rate >= 9:
-            st.success("🏆 評価: CEO級 - 経営判断も任せられます！")
+            st.success("🏆 評価: CEO級 - すばらしい経営感覚！")
         elif rate >= 7:
-            st.info("🥇 評価: 部長級 - 安定した数字力です。")
+            st.info("🥇 評価: 部長級 - 安定してます！")
         elif rate >= 4:
-            st.warning("🥈 評価: 課長級 - 基礎はできています。")
+            st.warning("🥈 評価: 課長級 - 基礎OKです！")
         else:
-            st.error("🥉 評価: 新人級 - まずは単位を覚えましょう。")
+            st.error("🥉 評価: 新人級 - まだまだ伸びしろアリ！")
         
         st.write("")
         c1, c2 = st.columns(2)
@@ -382,8 +377,8 @@ def mode_quiz():
     # 問題カード表示 (CSSクラス適用)
     st.markdown(f"""
     <div class="css-card">
-        <h3 style="margin-top:0; color: #38BDF8;">Question</h3>
-        <p style="font-size: 18px; line-height: 1.6; color: #F1F5F9;">{q['q_text']}</p>
+        <h3 style="margin-top:0; color: #0984E3;">Question</h3>
+        <p style="font-size: 18px; line-height: 1.6; color: #2D3436;">{q['q_text']}</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -439,8 +434,8 @@ def main():
         init_game_state()
 
     if st.session_state.page == "home":
-        st.markdown("<h1 style='text-align: center; color: #38BDF8;'>💼 ビジネス数字力道場</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #94A3B8;'>Advance your mental math skills with professional tools.</p>", unsafe_allow_html=True)
+        st.markdown("<h1 style='text-align: center; color: #0984E3;'>💼 ビジネス数字力道場</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #636E72;'>数字のセンスを磨く、<br>毎日の脳トレ習慣を始めましょう。</p>", unsafe_allow_html=True)
         st.write("")
         st.write("")
         
@@ -451,14 +446,14 @@ def main():
                 init_game_state()
                 st.session_state.page = "training"
                 st.rerun()
-            st.caption("10問セットの集中モード。")
+            st.caption("10問集中チャレンジ！")
         with col2:
             st.success("🧩 ビジネス概算クイズ")
             if st.button("シナリオ形式\n(4択式)", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "quiz"
                 st.rerun()
-            st.caption("4択で瞬時に判断する実戦モード。")
+            st.caption("4択サクサク実戦モード！")
 
         st.write("")
         st.write("")
