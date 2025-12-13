@@ -99,9 +99,20 @@ def format_japanese_answer(num):
             result.append(f"{val:,}{unit_name}")
     return "".join(result) if result else "0"
 
-def generate_random_number_with_unit():
-    base = random.randint(10, 9999) 
+def generate_random_number_with_unit(simple=False):
+    """
+    simple=True の場合は丸い数字（10, 20... 100, 200...）を生成
+    """
+    if simple:
+        # キリの良い数字
+        candidates = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200, 300, 500, 1000]
+        base = random.choice(candidates)
+    else:
+        # ランダム
+        base = random.randint(10, 9999) 
+        
     unit_type = random.choices(["", "万", "億"], weights=[1, 5, 4])[0]
+    
     val = 0
     label = ""
     if unit_type == "億":
@@ -115,16 +126,52 @@ def generate_random_number_with_unit():
         label = f"{val:,}"
     return val, label
 
-def generate_random_count():
-    base = random.randint(1, 9999)
+def generate_random_count(simple=False):
+    """
+    simple=True の場合は丸い個数・人数を生成
+    """
+    if simple:
+        candidates = [10, 20, 30, 50, 100, 200, 300, 500, 1000, 2000, 3000, 5000, 10000]
+        base = random.choice(candidates)
+    else:
+        base = random.randint(1, 9999)
+        
     unit_type = random.choices(["", "万"], weights=[8, 2])[0]
+    
+    # simpleモードの場合はあまり変な単位をつけない
     if unit_type == "万":
-        val = base * 10000
-        label = f"{base:,}万"
+        if simple and base < 100: # simpleなら 100万とかにする
+             val = base * 10000
+             label = f"{base:,}万"
+        elif not simple:
+             val = base * 10000
+             label = f"{base:,}万"
+        else:
+             val = base
+             label = f"{base:,}"
     else:
         val = base
         label = f"{base:,}"
+        
     return val, label
+
+def calculate_score(user_val, correct_val):
+    if correct_val == 0: return 0, 0.0, False
+    diff_pct = abs((user_val - correct_val) / correct_val * 100)
+    is_perfect = (user_val == correct_val)
+    points = 0
+    if diff_pct <= 2: points = 10
+    elif diff_pct <= 4: points = 9
+    elif diff_pct <= 6: points = 8
+    elif diff_pct <= 8: points = 7
+    elif diff_pct <= 10: points = 6
+    elif diff_pct <= 12: points = 5
+    elif diff_pct <= 14: points = 4
+    elif diff_pct <= 16: points = 3
+    elif diff_pct <= 18: points = 2
+    elif diff_pct <= 20: points = 1
+    else: points = 0
+    return points, diff_pct, is_perfect
 
 # ==========================================
 # ゲーム進行管理
@@ -132,6 +179,7 @@ def generate_random_count():
 def init_game_state():
     st.session_state.current_q_idx = 1
     st.session_state.score = 0
+    st.session_state.exact_matches = 0
     st.session_state.game_finished = False
     st.session_state.train_active = False
     st.session_state.quiz_data = None
@@ -147,28 +195,31 @@ def next_question():
         st.session_state.quiz_answered = False
 
 # ==========================================
-# モード1：トレーニング
+# モード1：トレーニング (通常 & 上級共通)
 # ==========================================
-def mode_training():
-    st.markdown("## 💪 概算入力トレーニング")
+def mode_training(advanced=False):
+    title = "💪 概算トレーニング（上級）" if advanced else "💪 概算トレーニング（基本）"
+    st.markdown(f"## {title}")
     
     if st.session_state.game_finished:
         st.markdown(f"""
         <div class="css-card" style="text-align: center;">
             <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
-            <p style="font-size: 24px; color: #E2E8F0;">SCORE: <span style="color: #FACC15; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
+            <p style="font-size: 20px; color: #E2E8F0;">TOTAL SCORE</p>
+            <p style="color: #FACC15; font-weight: bold; font-size: 48px; margin: 0;">{st.session_state.score}<span style="font-size: 24px;"> / 100</span></p>
+            <p style="font-size: 16px; color: #38BDF8; margin-top: 10px;">🏆 ピタリ賞: {st.session_state.exact_matches} 回</p>
         </div>
         """, unsafe_allow_html=True)
         
         rate = st.session_state.score
-        if rate >= 9:
-            st.success("🏆 評価: S (神レベル) - Perfect Calculation!")
-        elif rate >= 7:
-            st.info("🥇 評価: A (上級者) - Excellent Work.")
-        elif rate >= 4:
-            st.warning("🥈 評価: B (普通) - Good Job.")
+        if rate >= 90:
+            st.success("🏆 評価: S (神レベル) - 完璧な感覚です！")
+        elif rate >= 70:
+            st.info("🥇 評価: A (上級者) - 素晴らしい精度です。")
+        elif rate >= 40:
+            st.warning("🥈 評価: B (普通) - まずまずです。")
         else:
-            st.error("🥉 評価: C (修行中) - Keep Practice.")
+            st.error("🥉 評価: C (修行中) - 桁感覚を鍛えましょう。")
             
         st.write("")
         c1, c2 = st.columns(2)
@@ -188,34 +239,112 @@ def mode_training():
         st.session_state.page = "home"
         st.rerun()
 
+    # --- 問題生成ロジック (クイズと同じく文章題を生成) ---
     if not st.session_state.train_active:
         while True:
-            digit_range1 = random.randint(3, 9)
-            digit_range2 = random.randint(2, 6)
-            num1 = random.randint(10**(digit_range1-1), 10**digit_range1)
-            num2 = random.randint(10**(digit_range2-1), 10**digit_range2)
-            ans = num1 * num2
-            if ans <= MAX_LIMIT:
-                st.session_state.train_num1 = num1
-                st.session_state.train_num2 = num2
+            # パターン決定
+            if advanced:
+                # 上級: 後半は難しいパターン
+                if st.session_state.current_q_idx <= 6:
+                    pattern = random.choice([1, 2, 4])
+                else:
+                    pattern = 3 # 3要素計算
+            else:
+                # 基本: 簡単なパターンのみ(1, 2, 4)。3要素は出さない
+                pattern = random.choice([1, 2, 4])
+
+            # 数値生成 (simpleフラグで難易度調整)
+            is_simple = not advanced
+            
+            val1, label1 = generate_random_number_with_unit(simple=is_simple)
+            
+            if pattern == 4:
+                # 年数
+                val2 = random.randint(3, 15)
+                label2 = f"{val2}年"
+            elif pattern in [1, 3]:
+                # 個数
+                val2, label2 = generate_random_count(simple=is_simple)
+            else:
+                val2, label2 = generate_random_number_with_unit(simple=is_simple) # ダミー
+
+            # %生成
+            if advanced:
+                pct_num = random.randint(1, 99) # 1%刻み
+            else:
+                pct_num = random.choice([10, 20, 30, 40, 50]) # キリの良い数字
+            
+            pct_val = pct_num / 100.0
+            
+            question_text = ""
+            correct_val = 0
+            
+            # HTML(<b>)を使用
+            if pattern == 1:
+                templates = [
+                    f"単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れた。<br>売上推定値は？",
+                    f"1人あたり <b>{label1}円</b> のコストがかかる研修に <b>{label2}人</b> が参加します。<br>総費用推定値は？",
+                    f"月商 <b>{label1}円</b> の店舗を <b>{label2}店舗</b> 運営しています。<br>全店の月商合計は？",
+                    f"契約単価 <b>{label1}円</b> のサブスク会員が <b>{label2}人</b> います。<br>毎月の売上は？"
+                ]
+                question_text = random.choice(templates)
+                correct_val = val1 * val2
+            elif pattern == 2:
+                templates = [
+                    f"売上高 <b>{label1}円</b> に対して、営業利益率は <b>{pct_num}%</b> です。<br>営業利益は？",
+                    f"市場規模 <b>{label1}円</b> の業界で、シェア <b>{pct_num}%</b> を獲得しました。<br>自社の売上は？",
+                    f"予算 <b>{label1}円</b> のうち、すでに <b>{pct_num}%</b> を消化しました。<br>消化した金額は？",
+                    f"投資額 <b>{label1}円</b> に対して、リターン（利回り）が <b>{pct_num}%</b> ありました。<br>利益額は？"
+                ]
+                question_text = random.choice(templates)
+                correct_val = val1 * pct_val
+            elif pattern == 3:
+                templates = [
+                    f"単価 <b>{label1}円</b> の商品を <b>{label2}個</b> 販売し、利益率は <b>{pct_num}%</b> でした。<br>利益額は？",
+                    f"客単価 <b>{label1}円</b> で <b>{label2}人</b> が来店し、原価率は <b>{pct_num}%</b> です。<br>原価の総額は？",
+                    f"1件 <b>{label1}円</b> の案件が <b>{label2}件</b> あり、成約率は <b>{pct_num}%</b> でした。<br>成約による売上合計は？"
+                ]
+                question_text = random.choice(templates)
+                correct_val = val1 * val2 * pct_val
+            elif pattern == 4:
+                templates = [
+                    f"子会社株式の減損テスト。将来CF <b>{label1}円</b> が <b>{label2}</b> 続くと仮定します。<br>割引前のCF総額は？",
+                    f"投資案件の評価。年間 <b>{label1}円</b> のリターンが <b>{label2}</b> 継続する見込みです。<br>期間累計のリターンは？",
+                    f"のれんの減損判定。事業計画では年間 <b>{label1}円</b> の利益が <b>{label2}</b> 発生します。<br>この期間の利益合計は？",
+                    f"新規事業のPL計画。年間固定費 <b>{label1}円</b> が <b>{label2}</b> かかる見通しです。<br>固定費の総額は？"
+                ]
+                question_text = random.choice(templates)
+                correct_val = val1 * val2
+            
+            # データ保存 (トレーニング用)
+            if MIN_LIMIT <= correct_val <= MAX_LIMIT: 
+                st.session_state.train_data = {
+                    "q_text": question_text,
+                    "correct": correct_val,
+                    "raw_val1": val1, "raw_val2": val2, "raw_pct": pct_num,
+                    "pattern": pattern
+                }
                 st.session_state.train_active = True
                 break
 
-    st.markdown("### Question")
-    with st.container():
-        st.markdown('<div class="css-card">', unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([2, 0.5, 2])
-        with c1: st.metric("数値 A", f"{st.session_state.train_num1:,}")
-        with c2: st.markdown("<h2 style='text-align: center; color: #64748B;'>×</h2>", unsafe_allow_html=True)
-        with c3: st.metric("数値 B", f"{st.session_state.train_num2:,}")
-        st.markdown('</div>', unsafe_allow_html=True)
+    q = st.session_state.train_data
+
+    st.markdown(f"""
+    <div class="css-card">
+        <h3 style="margin-top:0; color: #38BDF8;">Question</h3>
+        <p style="font-size: 18px; line-height: 1.6; color: #F1F5F9;">{q['q_text']}</p>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.write("")
+    
+    # 入力フィールド
+    # format="%d" で整数表示（指数表記回避）。step=1で整数入力。
     user_ans = st.number_input(
         "概算解答を入力", 
-        value=0.0, 
-        step=10000.0, 
-        format="%.0f", 
+        value=0, 
+        step=1, 
+        format="%d",
         key=f"train_ans_{st.session_state.current_q_idx}"
     )
     
@@ -224,21 +353,41 @@ def mode_training():
             st.session_state.quiz_answered = True
             st.rerun()
     else:
-        ans = st.session_state.train_num1 * st.session_state.train_num2
-        diff_pct = ((user_ans - ans) / ans * 100) if ans != 0 else 0
+        correct_val = q['correct']
+        pattern_used = q['pattern']
         
-        st.info(f"🧮 計算イメージ: {st.session_state.train_num1:,.0f} × {st.session_state.train_num2:,.0f} = {ans:,.0f}")
-        st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(ans)}</span>", unsafe_allow_html=True)
+        # 計算過程
+        v1 = q['raw_val1']
+        v2 = q['raw_val2']
+        pct = q['raw_pct']
+        calc_str = ""
+        if pattern_used == 1: calc_str = f"{v1:,.0f} × {v2:,.0f} = {correct_val:,.0f}"
+        elif pattern_used == 2: calc_str = f"{v1:,.0f} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 3: calc_str = f"{v1:,.0f} × {v2:,.0f} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 4: calc_str = f"{v1:,.0f} × {v2} = {correct_val:,.0f}"
+
+        # 得点計算
+        points, diff_pct, is_perfect = calculate_score(user_ans, correct_val)
         
-        is_correct = False
-        if abs(diff_pct) <= 20:
-            st.success(f"⭕ 正解！ (ズレ: {diff_pct:.1f}%)")
-            is_correct = True
+        # あなたの回答（カンマ付き）を表示
+        st.markdown(f"あなたの回答: **{user_ans:,}**")
+
+        st.info(f"🧮 計算イメージ: {calc_str}")
+        st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(correct_val)}</span>", unsafe_allow_html=True)
+        
+        if is_perfect:
+            st.markdown(f"<div style='background-color:rgba(250, 204, 21, 0.2); padding:10px; border-radius:5px; text-align:center; color:#FACC15; font-weight:bold; margin-bottom:10px;'>🏆 ピタリ賞！ 獲得ポイント: {points}点</div>", unsafe_allow_html=True)
+        elif points >= 8:
+            st.success(f"⭕ 素晴らしい！ 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
+        elif points >= 1:
+            st.warning(f"🔺 まずまず！ 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
         else:
-            st.error(f"❌ 不正解... (ズレ: {diff_pct:.1f}%)")
+            st.error(f"❌ 残念... 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
 
         if st.button("次の問題へ", type="primary"):
-            if is_correct: st.session_state.score += 1
+            st.session_state.score += points
+            if is_perfect:
+                st.session_state.exact_matches += 1
             next_question()
             st.rerun()
 
@@ -287,27 +436,23 @@ def mode_quiz(advanced=False):
 
     if st.session_state.quiz_data is None:
         while True:
-            # ★問題パターンの恣意的な制御ロジック
-            # 第1問〜第6問: 基礎編 [パターン1(個数), 2(%), 4(年数)]
+            # 第1問〜第6問: 基礎編 [パターン1, 2, 4]
             if st.session_state.current_q_idx <= 6:
                 pattern = random.choice([1, 2, 4])
-            # 第7問〜第10問: 応用編 [パターン3(3要素計算)]
+            # 第7問〜第10問: 応用編 [パターン3]
             else:
                 pattern = 3
 
-            # val1生成（金額）
             val1, label1 = generate_random_number_with_unit()
             
-            # val2生成（パターンによって個数か年数か分岐）
             if pattern == 4:
                 val2 = random.randint(3, 15)
                 label2 = f"{val2}年"
             elif pattern in [1, 3]:
                 val2, label2 = generate_random_count()
             else:
-                val2, label2 = generate_random_number_with_unit() # ダミー
+                val2, label2 = generate_random_number_with_unit()
 
-            # %生成
             if advanced:
                 pct_num = random.randint(1, 99)
             else:
@@ -318,7 +463,6 @@ def mode_quiz(advanced=False):
             question_text = ""
             correct_val = 0
             
-            # --- 問題文分岐 ---
             if pattern == 1:
                 templates = [
                     f"単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れた。<br>売上推定値は？",
@@ -361,7 +505,6 @@ def mode_quiz(advanced=False):
         options = []
         options.append(correct_val)
         
-        # --- 選択肢生成 ---
         if advanced:
             multipliers = [0.85, 0.90, 0.95, 1.05, 1.10, 1.15]
             selected_mults = random.sample(multipliers, 3)
@@ -480,12 +623,16 @@ def main():
 
         # col2: トレーニング（入力）
         with col2:
-            st.info("📊 ストイックに練習")
-            if st.button("概算トレーニング\n(入力式)", use_container_width=True):
+            st.info("📊 概算トレーニング（入力式）")
+            if st.button("概算トレーニング（基本）", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "training"
                 st.rerun()
-            st.caption("10問セットの集中モード。")
+            if st.button("概算トレーニング（上級）", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "training_advanced"
+                st.rerun()
+            st.caption("誤差2%以内で満点。基本は丸い数字、上級は実戦的な数字。")
 
         st.write("")
         st.write("")
@@ -498,7 +645,9 @@ def main():
             st.markdown("Example: **決算書の読み方** ([Link](https://amazon.co.jp))")
 
     elif st.session_state.page == "training":
-        mode_training()
+        mode_training(advanced=False)
+    elif st.session_state.page == "training_advanced":
+        mode_training(advanced=True)
     elif st.session_state.page == "quiz":
         mode_quiz(advanced=False)
     elif st.session_state.page == "quiz_advanced":
