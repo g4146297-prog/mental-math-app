@@ -2,11 +2,10 @@ import streamlit as st
 import random
 
 # ==========================================
-# デザイン設定 (CSS) - 案A: スマート＆モダン
+# デザイン設定 (CSS) - 案A改: スマート＆モダン（調整版）
 # ==========================================
 def apply_custom_design():
-    # 案A: ダークモード & ネオンカラー
-    # 背景: ダークネイビー / アクセント: シアンブルー & ネオンイエロー
+    # 案A改: ダークモード & 落ち着いたネオンカラー
     custom_css = """
     <style>
         /* 全体の背景色 (ダークモード) */
@@ -23,20 +22,22 @@ def apply_custom_design():
             letter-spacing: 0.05em;
         }
         
-        /* ボタンのデザイン (プライマリー) - グラデーション */
+        /* ★変更点: ボタンのデザイン (プライマリー) - 発色を抑えた深い青 */
         div.stButton > button:first-child {
-            background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+            /* 以前より深みのある青のグラデーションに変更 */
+            background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
             color: white;
-            border-radius: 4px; /* 角を少しシャープに */
+            border-radius: 4px;
             border: none;
-            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); /* 光るような影 */
+            /* 影の色も少し落ち着かせる */
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
             font-weight: bold;
             letter-spacing: 0.05em;
             transition: all 0.2s ease-in-out;
         }
         div.stButton > button:first-child:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.6);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6);
         }
         
         /* 通常ボタン (セカンダリー) */
@@ -53,15 +54,15 @@ def apply_custom_design():
         /* メトリクス (数字表示) - ネオンイエローで強調 */
         [data-testid="stMetricValue"] {
             color: #FACC15; /* ネオンイエロー */
-            font-family: 'Consolas', 'Monaco', monospace; /* プログラミングフォント */
+            font-family: 'Consolas', 'Monaco', monospace;
             font-weight: bold;
-            text-shadow: 0 0 10px rgba(250, 204, 21, 0.3); /* 光彩効果 */
+            text-shadow: 0 0 10px rgba(250, 204, 21, 0.3);
         }
         [data-testid="stMetricLabel"] {
             color: #94A3B8;
         }
 
-        /* カード風コンテナ (近未来的なパネル) */
+        /* カード風コンテナ */
         .css-card {
             background-color: #1E293B;
             border-left: 4px solid #FACC15;
@@ -71,7 +72,7 @@ def apply_custom_design():
             margin-bottom: 20px;
         }
         
-        /* info/successボックスのカスタマイズ (ダークテーマに合わせる) */
+        /* info/successボックス */
         .stAlert {
             background-color: #1E293B;
             border: 1px solid #334155;
@@ -174,7 +175,6 @@ def mode_training():
     st.markdown("## 💪 概算入力トレーニング")
     
     if st.session_state.game_finished:
-        # リザルトカード (CSSクラス適用)
         st.markdown(f"""
         <div class="css-card" style="text-align: center;">
             <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
@@ -224,7 +224,6 @@ def mode_training():
                 break
 
     st.markdown("### Question")
-    # デザイン調整用コンテナ
     with st.container():
         st.markdown('<div class="css-card">', unsafe_allow_html=True)
         c1, c2, c3 = st.columns([2, 0.5, 2])
@@ -324,8 +323,8 @@ def mode_quiz():
             
             if pattern == 1:
                 templates = [
-                    f"単価 **{label1}円** の商品が **{label2}個** 売れました。<br>売上はいくら？",
-                    f"1人あたり **{label1}円** のコストがかかる研修に **{label2}人** が参加します。<br>総費用は？",
+                    f"単価 **{label1}円** の商品が **{label2}個** 売れた。<br>売上推定値は？",
+                    f"1人あたり **{label1}円** のコストがかかる研修に **{label2}人** が参加します。<br>総費用推定値は？",
                     f"月商 **{label1}円** の店舗を **{label2}店舗** 運営しています。<br>全店の月商合計は？",
                     f"契約単価 **{label1}円** のサブスク会員が **{label2}人** います。<br>毎月の売上は？"
                 ]
@@ -379,7 +378,6 @@ def mode_quiz():
 
     q = st.session_state.quiz_data
     
-    # 問題カード表示 (CSSクラス適用)
     st.markdown(f"""
     <div class="css-card">
         <h3 style="margin-top:0; color: #38BDF8;">Question</h3>
@@ -439,7 +437,8 @@ def main():
         init_game_state()
 
     if st.session_state.page == "home":
-        st.markdown("<h1 style='text-align: center; color: #38BDF8;'>💼 ビジネス数字力道場</h1>", unsafe_allow_html=True)
+        # ★変更点: タイトルを大きくし、光彩効果（テキストシャドウ）を追加
+        st.markdown("<h1 style='text-align: center; color: #38BDF8; font-size: 3.5rem; text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);'>💼 ビジネス数字力道場</h1>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: #94A3B8;'>Advance your mental math skills with professional tools.</p>", unsafe_allow_html=True)
         st.write("")
         st.write("")
