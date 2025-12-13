@@ -2,7 +2,7 @@ import streamlit as st
 import random
 
 # ==========================================
-# デザイン設定 (CSS) - 案A改: スマート＆モダン
+# デザイン設定 (CSS)
 # ==========================================
 def apply_custom_design():
     custom_css = """
@@ -79,7 +79,7 @@ def apply_custom_design():
 # ==========================================
 # 定数設定
 # ==========================================
-MAX_LIMIT = 10**13  # 上限: 10兆
+MAX_LIMIT = 10**13
 MIN_LIMIT = 100
 TOTAL_QUESTIONS = 10
 
@@ -87,12 +87,10 @@ TOTAL_QUESTIONS = 10
 # 共通関数: 数値フォーマット・生成
 # ==========================================
 def format_japanese_answer(num):
-    """数値を '1兆2000億' のような形式に変換"""
     try:
         int_num = int(num)
     except:
         return str(num)
-        
     if int_num == 0: return "0"
     units = [(10**12, "兆"), (10**8, "億"), (10**4, "万"), (1, "")]
     result = []
@@ -105,18 +103,12 @@ def format_japanese_answer(num):
     return "".join(result) if result else "0"
 
 def format_number_with_unit_label(value):
-    """
-    数値を読みやすい単位付き文字列に変換して返す (例: 15000 -> 1.5万, 100 -> 100)
-    問題文の表示用。
-    """
     if value >= 10**8:
-        # 億単位
         if value % 10**8 == 0:
             return f"{value // 10**8:,}億"
         else:
             return f"{value / 10**8:.1f}億".replace(".0", "")
     elif value >= 10**4:
-        # 万単位
         if value % 10**4 == 0:
             return f"{value // 10**4:,}万"
         else:
@@ -125,184 +117,82 @@ def format_number_with_unit_label(value):
         return f"{value:,}"
 
 def get_random_val(min_val, max_val, simple=False):
-    """
-    指定範囲内でランダムな整数を生成する。
-    simple=True の場合、有効数字1桁程度のキリの良い数字にする。
-    """
     val = random.randint(min_val, max_val)
-    
     if simple:
-        # 桁数に合わせて丸める
         digits = len(str(val))
         if digits > 1:
-            # 上位1桁〜2桁を残して0にするなどの調整
-            # ここではシンプルに「上位1桁 + ゼロ」または「上位2桁(50, 25など) + ゼロ」にする
-            
-            # 候補となる「キリの良い係数」
             bases = [10, 20, 30, 40, 50, 60, 70, 80, 90, 15, 25, 12, 18]
             base = random.choice(bases)
-            
-            # 桁合わせ
-            # min_valの桁数を考慮
             min_digits = len(str(min_val))
             target_digits = random.randint(min_digits, len(str(max_val)))
-            
-            # 10^(target_digits - 2) などを掛ける
             power = max(0, target_digits - 2)
             val = base * (10**power)
-            
-            # 範囲外なら補正
             if val < min_val: val = min_val
             if val > max_val: val = max_val
-            
-            # さらに100以下なら丸めすぎない
-            if val < 100:
-                val = (val // 10) * 10
-            
+            if val < 100: val = (val // 10) * 10
     return int(val)
 
 # ==========================================
 # シナリオデータ定義
 # ==========================================
-# 各シナリオに「現実的な数値範囲」を設定
 SCENARIOS = [
-    # --- パターン1: A * B (単価 * 個数 / コスト * 人数 / etc) ---
-    {
-        "pattern": 1,
-        "template": "単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れました。<br>売上推定値は？",
-        "range1": (100, 50000),      # 単価: 100円 ~ 5万円
-        "range2": (100, 100000)      # 個数: 100個 ~ 10万個
-    },
-    {
-        "pattern": 1,
-        "template": "1人あたり <b>{label1}円</b> のコストがかかる研修に <b>{label2}人</b> が参加します。<br>総費用推定値は？",
-        "range1": (5000, 200000),    # コスト: 5,000円 ~ 20万円
-        "range2": (10, 5000)         # 人数: 10人 ~ 5,000人
-    },
-    {
-        "pattern": 1,
-        "template": "月商 <b>{label1}円</b> の店舗を <b>{label2}店舗</b> 運営しています。<br>全店の月商合計は？",
-        "range1": (1000000, 50000000), # 月商: 100万円 ~ 5,000万円
-        "range2": (3, 1000)          # 店舗数: 3店舗 ~ 1,000店舗
-    },
-    {
-        "pattern": 1,
-        "template": "契約単価 <b>{label1}円</b> のサブスク会員が <b>{label2}人</b> います。<br>毎月の売上は？",
-        "range1": (500, 10000),      # 単価: 500円 ~ 1万円
-        "range2": (1000, 1000000)    # 会員数: 1,000人 ~ 100万人
-    },
-
-    # --- パターン2: A * r (金額 * %) ---
-    {
-        "pattern": 2,
-        "template": "売上高 <b>{label1}円</b> に対して、営業利益率は <b>{pct}%</b> です。<br>営業利益は？",
-        "range1": (100000000, 1000000000000), # 売上: 1億円 ~ 1兆円
-        "pct_range": (1, 30)        # 利益率: 1% ~ 30%
-    },
-    {
-        "pattern": 2,
-        "template": "市場規模 <b>{label1}円</b> の業界で、シェア <b>{pct}%</b> を獲得しました。<br>自社の売上は？",
-        "range1": (1000000000, 1000000000000), # 市場: 10億円 ~ 1兆円
-        "pct_range": (1, 50)        # シェア: 1% ~ 50%
-    },
-    {
-        "pattern": 2,
-        "template": "予算 <b>{label1}円</b> のうち、すでに <b>{pct}%</b> を消化しました。<br>消化した金額は？",
-        "range1": (1000000, 1000000000), # 予算: 100万円 ~ 10億円
-        "pct_range": (5, 95)        # 消化率
-    },
-    {
-        "pattern": 2,
-        "template": "投資額 <b>{label1}円</b> に対して、リターン（利回り）が <b>{pct}%</b> ありました。<br>利益額は？",
-        "range1": (1000000, 10000000000), # 投資: 100万円 ~ 100億円
-        "pct_range": (3, 20)        # 利回り: 3% ~ 20%
-    },
-
-    # --- パターン3: A * B * r (単価 * 個数 * %) ---
-    {
-        "pattern": 3,
-        "template": "単価 <b>{label1}円</b> の商品を <b>{label2}個</b> 販売し、利益率は <b>{pct}%</b> でした。<br>利益額は？",
-        "range1": (100, 20000),      # 単価
-        "range2": (100, 50000),      # 個数
-        "pct_range": (5, 40)         # 利益率
-    },
-    {
-        "pattern": 3,
-        "template": "客単価 <b>{label1}円</b> で <b>{label2}人</b> が来店し、原価率は <b>{pct}%</b> です。<br>原価の総額は？",
-        "range1": (500, 10000),      # 客単価
-        "range2": (100, 50000),      # 来店数
-        "pct_range": (20, 80)        # 原価率
-    },
-    {
-        "pattern": 3,
-        "template": "案件単価 <b>{label1}円</b> の案件が <b>{label2}件</b> あり、成約率は <b>{pct}%</b> でした。<br>成約による売上合計は？",
-        "range1": (100000, 5000000), # 案件単価
-        "range2": (10, 500),         # 件数
-        "pct_range": (5, 50)         # 成約率
-    },
-
-    # --- パターン4: A * B (金額 * 年数) ---
-    {
-        "pattern": 4,
-        "template": "子会社株式の減損テスト。将来CF <b>{label1}円</b> が <b>{label2}</b> 続くと仮定します。<br>割引前のCF総額は？",
-        "range1": (10000000, 5000000000), # CF: 1000万円 ~ 50億円
-        "range2": (3, 15),           # 年数: 3年 ~ 15年
-        "suffix2": "年"
-    },
-    {
-        "pattern": 4,
-        "template": "投資案件の評価。年間 <b>{label1}円</b> のリターンが <b>{label2}</b> 継続する見込みです。<br>期間累計のリターンは？",
-        "range1": (1000000, 1000000000),  # リターン
-        "range2": (3, 20),           # 年数
-        "suffix2": "年"
-    },
-    {
-        "pattern": 4,
-        "template": "新規事業のPL計画。年間固定費 <b>{label1}円</b> が <b>{label2}</b> かかる見通しです。<br>固定費の総額は？",
-        "range1": (5000000, 500000000),   # 固定費
-        "range2": (2, 5),            # 年数
-        "suffix2": "年"
-    }
+    # パターン1: A * B
+    { "pattern": 1, "template": "単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れました。<br>売上推定値は？", "range1": (100, 50000), "range2": (100, 100000) },
+    { "pattern": 1, "template": "1人あたり <b>{label1}円</b> のコストがかかる研修に <b>{label2}人</b> が参加します。<br>総費用推定値は？", "range1": (5000, 200000), "range2": (10, 5000) },
+    { "pattern": 1, "template": "月商 <b>{label1}円</b> の店舗を <b>{label2}店舗</b> 運営しています。<br>全店の月商合計は？", "range1": (1000000, 50000000), "range2": (3, 1000) },
+    { "pattern": 1, "template": "契約単価 <b>{label1}円</b> のサブスク会員が <b>{label2}人</b> います。<br>毎月の売上は？", "range1": (500, 10000), "range2": (1000, 1000000) },
+    # パターン2: A * r
+    { "pattern": 2, "template": "売上高 <b>{label1}円</b> に対して、営業利益率は <b>{pct}%</b> です。<br>営業利益は？", "range1": (100000000, 1000000000000), "pct_range": (1, 30) },
+    { "pattern": 2, "template": "市場規模 <b>{label1}円</b> の業界で、シェア <b>{pct}%</b> を獲得しました。<br>自社の売上は？", "range1": (1000000000, 1000000000000), "pct_range": (1, 50) },
+    { "pattern": 2, "template": "予算 <b>{label1}円</b> のうち、すでに <b>{pct}%</b> を消化しました。<br>消化した金額は？", "range1": (1000000, 1000000000), "pct_range": (5, 95) },
+    { "pattern": 2, "template": "投資額 <b>{label1}円</b> に対して、リターン（利回り）が <b>{pct}%</b> ありました。<br>利益額は？", "range1": (1000000, 10000000000), "pct_range": (3, 20) },
+    # パターン3: A * B * r
+    { "pattern": 3, "template": "単価 <b>{label1}円</b> の商品を <b>{label2}個</b> 販売し、利益率は <b>{pct}%</b> でした。<br>利益額は？", "range1": (100, 20000), "range2": (100, 50000), "pct_range": (5, 40) },
+    { "pattern": 3, "template": "客単価 <b>{label1}円</b> で <b>{label2}人</b> が来店し、原価率は <b>{pct}%</b> です。<br>原価の総額は？", "range1": (500, 10000), "range2": (100, 50000), "pct_range": (20, 80) },
+    { "pattern": 3, "template": "案件単価 <b>{label1}円</b> の案件が <b>{label2}件</b> あり、成約率は <b>{pct}%</b> でした。<br>成約による売上合計は？", "range1": (100000, 5000000), "range2": (10, 500), "pct_range": (5, 50) },
+    # パターン4: A * B(年)
+    { "pattern": 4, "template": "子会社株式の減損テスト。将来CF <b>{label1}円</b> が <b>{label2}</b> 続くと仮定します。<br>割引前のCF総額は？", "range1": (10000000, 5000000000), "range2": (3, 15), "suffix2": "年" },
+    { "pattern": 4, "template": "投資案件の評価。年間 <b>{label1}円</b> のリターンが <b>{label2}</b> 継続する見込みです。<br>期間累計のリターンは？", "range1": (1000000, 1000000000), "range2": (3, 20), "suffix2": "年" },
+    { "pattern": 4, "template": "新規事業のPL計画。年間固定費 <b>{label1}円</b> が <b>{label2}</b> かかる見通しです。<br>固定費の総額は？", "range1": (5000000, 500000000), "range2": (2, 5), "suffix2": "年" }
 ]
 
-def generate_question_data(is_advanced=False, force_pattern=None):
+def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts=None, simple_pct=None):
     """
-    シナリオリストから適切な問題を選び、数値を生成して返す
+    問題生成ロジック
+    simple_amounts: Trueなら数値を丸める（例: 3000）。Falseならリアルな数値（例: 3450）。
+    simple_pct: Trueなら%を5%刻みにする。Falseなら1%刻み。
     """
-    # パターンによるフィルタリング（指定があれば）
+    # 指定がない場合のデフォルト動作設定
+    if simple_amounts is None: simple_amounts = not is_advanced
+    if simple_pct is None: simple_pct = not is_advanced
+
     if force_pattern:
         candidates = [s for s in SCENARIOS if s['pattern'] == force_pattern]
     else:
-        # 上級か基礎かで出現パターンを調整してもよいが、ここでは全候補から
         candidates = SCENARIOS
         
     scenario = random.choice(candidates)
     pattern = scenario['pattern']
     
-    # --- 数値生成 (基礎編ならsimple=True) ---
-    simple_mode = not is_advanced
-    
-    val1 = get_random_val(scenario['range1'][0], scenario['range1'][1], simple=simple_mode)
+    # 数値生成
+    val1 = get_random_val(scenario['range1'][0], scenario['range1'][1], simple=simple_amounts)
     
     val2 = 1
     pct = 0
     
-    # 2つ目の値 (パターン1, 3, 4で使用)
     if 'range2' in scenario:
-        val2 = get_random_val(scenario['range2'][0], scenario['range2'][1], simple=simple_mode)
+        val2 = get_random_val(scenario['range2'][0], scenario['range2'][1], simple=simple_amounts)
         
-    # %の値 (パターン2, 3で使用)
     if 'pct_range' in scenario:
         min_p, max_p = scenario['pct_range']
-        if simple_mode:
-            # 5%刻み (5, 10, 15...)
+        if simple_pct:
+            # 5%刻み
             pct = random.choice(list(range(min_p, max_p+1, 5)))
             if pct == 0: pct = 5
         else:
             # 1%刻み
             pct = random.randint(min_p, max_p)
     
-    # ラベル生成 (単位付き)
     label1 = format_number_with_unit_label(val1)
     
     label2 = ""
@@ -311,18 +201,12 @@ def generate_question_data(is_advanced=False, force_pattern=None):
     elif pattern == 4:
         label2 = f"{val2}{scenario.get('suffix2', '')}"
         
-    # 正解計算
     correct_val = 0
-    if pattern == 1: # A * B
-        correct_val = val1 * val2
-    elif pattern == 2: # A * r
-        correct_val = val1 * (pct / 100.0)
-    elif pattern == 3: # A * B * r
-        correct_val = val1 * val2 * (pct / 100.0)
-    elif pattern == 4: # A * B(年)
-        correct_val = val1 * val2
+    if pattern == 1: correct_val = val1 * val2
+    elif pattern == 2: correct_val = val1 * (pct / 100.0)
+    elif pattern == 3: correct_val = val1 * val2 * (pct / 100.0)
+    elif pattern == 4: correct_val = val1 * val2
 
-    # 問題文フォーマット
     q_text = scenario['template'].format(label1=label1, label2=label2, pct=pct)
     
     return {
@@ -417,16 +301,12 @@ def mode_training(advanced=False):
         st.session_state.page = "home"
         st.rerun()
 
-    # --- 問題生成 ---
     if st.session_state.quiz_data is None:
-        # パターン制御
         force_p = None
         if advanced:
-            # 上級: 後半(7-10問目)は3要素計算(パターン3)
             if st.session_state.current_q_idx > 6:
                 force_p = 3
         else:
-            # 基礎: 3要素計算(パターン3)は出さない。パターン1,2,4から
             while True:
                 temp_q = generate_question_data(is_advanced=False)
                 if temp_q['pattern'] != 3:
@@ -434,6 +314,8 @@ def mode_training(advanced=False):
                     break
         
         if st.session_state.quiz_data is None:
+             # トレーニング（基礎）は、計算しやすいように simple_amounts=True (丸めた数字) を維持
+             # トレーニング（上級）は、simple_amounts=False (リアルな数字)
              st.session_state.quiz_data = generate_question_data(is_advanced=advanced, force_pattern=force_p)
 
     q = st.session_state.quiz_data
@@ -447,7 +329,6 @@ def mode_training(advanced=False):
     
     st.write("")
     
-    # 入力フィールド
     user_ans = st.number_input(
         "概算解答を入力 (円)", 
         value=0, 
@@ -467,9 +348,8 @@ def mode_training(advanced=False):
         v2 = q['raw_val2']
         pct = q['raw_pct']
         
-        calc_str = ""
-        # 表示用の計算式構築
         lbl1 = format_number_with_unit_label(v1)
+        calc_str = ""
         if pattern_used == 1: 
             lbl2 = format_number_with_unit_label(v2)
             calc_str = f"{lbl1} × {lbl2} = {format_japanese_answer(correct_val)}"
@@ -546,16 +426,12 @@ def mode_quiz(advanced=False):
         st.session_state.page = "home"
         st.rerun()
 
-    # --- 問題生成 ---
     if st.session_state.quiz_data is None:
-        # パターン制御
         force_p = None
         if advanced:
-            # 上級: 後半(7-10問目)は3要素計算
             if st.session_state.current_q_idx > 6:
                 force_p = 3
         else:
-            # 基礎: 3要素計算は除外
             while True:
                 temp_q = generate_question_data(is_advanced=False)
                 if temp_q['pattern'] != 3:
@@ -563,24 +439,26 @@ def mode_quiz(advanced=False):
                     break
         
         if st.session_state.quiz_data is None:
-             st.session_state.quiz_data = generate_question_data(is_advanced=advanced, force_pattern=force_p)
+             # クイズ（基礎）: 数字は丸めない(simple_amounts=False), %は5%刻み(simple_pct=True)
+             if not advanced:
+                 st.session_state.quiz_data = generate_question_data(is_advanced=False, force_pattern=force_p, simple_amounts=False, simple_pct=True)
+             else:
+                 # クイズ（上級）: 全部リアル
+                 st.session_state.quiz_data = generate_question_data(is_advanced=True, force_pattern=force_p)
         
-        # 選択肢生成
         q = st.session_state.quiz_data
         correct = q['correct']
         options = [correct]
         
         if advanced:
-            # 5%刻みの選択肢
             multipliers = [0.85, 0.90, 0.95, 1.05, 1.10, 1.15]
             selected_mults = random.sample(multipliers, 3)
             for m in selected_mults:
                 options.append(correct * m)
         else:
-            # 桁ズレや20%ズレ
-            if q['pattern'] == 2: # %計算
+            if q['pattern'] == 2:
                 options.extend([correct * 0.8, correct * 1.2, correct * 1.5])
-            else: # 掛け算系
+            else:
                 options.append(correct * 10)
                 options.append(correct / 10)
                 options.append(random.choice([correct * 100, correct / 100, correct * 2]))
@@ -631,7 +509,6 @@ def mode_quiz(advanced=False):
         ratio = user_val / correct_val if correct_val != 0 else 0
         is_correct = False
         
-        # 4択なので、ほぼ一致していれば正解
         if 0.99 <= ratio <= 1.01: 
             st.success("🎉 正解！")
             is_correct = True
