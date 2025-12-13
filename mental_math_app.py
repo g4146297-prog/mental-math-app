@@ -159,10 +159,7 @@ SCENARIOS = [
 def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts=None, simple_pct=None):
     """
     問題生成ロジック
-    simple_amounts: Trueなら数値を丸める（例: 3000）。Falseならリアルな数値（例: 3450）。
-    simple_pct: Trueなら%を5%刻みにする。Falseなら1%刻み。
     """
-    # 指定がない場合のデフォルト動作設定
     if simple_amounts is None: simple_amounts = not is_advanced
     if simple_pct is None: simple_pct = not is_advanced
 
@@ -174,9 +171,7 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
     scenario = random.choice(candidates)
     pattern = scenario['pattern']
     
-    # 数値生成
     val1 = get_random_val(scenario['range1'][0], scenario['range1'][1], simple=simple_amounts)
-    
     val2 = 1
     pct = 0
     
@@ -186,15 +181,12 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
     if 'pct_range' in scenario:
         min_p, max_p = scenario['pct_range']
         if simple_pct:
-            # 5%刻み
             pct = random.choice(list(range(min_p, max_p+1, 5)))
             if pct == 0: pct = 5
         else:
-            # 1%刻み
             pct = random.randint(min_p, max_p)
     
     label1 = format_number_with_unit_label(val1)
-    
     label2 = ""
     if pattern in [1, 3]:
         label2 = format_number_with_unit_label(val2)
@@ -301,12 +293,15 @@ def mode_training(advanced=False):
         st.session_state.page = "home"
         st.rerun()
 
+    # --- 問題生成 ---
     if st.session_state.quiz_data is None:
         force_p = None
         if advanced:
+            # 上級: 後半(7-10問目)は3要素計算
             if st.session_state.current_q_idx > 6:
                 force_p = 3
         else:
+            # 基礎: 3要素計算は除外
             while True:
                 temp_q = generate_question_data(is_advanced=False)
                 if temp_q['pattern'] != 3:
@@ -314,8 +309,7 @@ def mode_training(advanced=False):
                     break
         
         if st.session_state.quiz_data is None:
-             # トレーニング（基礎）は、計算しやすいように simple_amounts=True (丸めた数字) を維持
-             # トレーニング（上級）は、simple_amounts=False (リアルな数字)
+             # トレーニング（基礎）は丸めた数字、上級はリアル
              st.session_state.quiz_data = generate_question_data(is_advanced=advanced, force_pattern=force_p)
 
     q = st.session_state.quiz_data
@@ -329,6 +323,7 @@ def mode_training(advanced=False):
     
     st.write("")
     
+    # 入力フィールド
     user_ans = st.number_input(
         "概算解答を入力 (円)", 
         value=0, 
@@ -336,6 +331,10 @@ def mode_training(advanced=False):
         format="%d",
         key=f"train_ans_{st.session_state.current_q_idx}"
     )
+    
+    # ★追加: 回答提出前にカンマ付きの金額を確認できるプレビュー表示
+    if user_ans > 0:
+        st.markdown(f"<p style='color:#FACC15; font-weight:bold;'>入力プレビュー: {user_ans:,} 円</p>", unsafe_allow_html=True)
     
     if not st.session_state.quiz_answered:
         if st.button("答え合わせ"):
@@ -363,8 +362,6 @@ def mode_training(advanced=False):
 
         points, diff_pct, is_perfect = calculate_score(user_ans, correct_val)
         
-        st.markdown(f"あなたの回答: **{user_ans:,}**")
-
         st.info(f"🧮 計算イメージ: {calc_str}")
         st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(correct_val)}</span> <span style='font-size: 14px; color: #888;'>({correct_val:,})</span>", unsafe_allow_html=True)
         
