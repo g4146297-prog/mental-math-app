@@ -319,7 +319,7 @@ def mode_quiz():
             question_text = ""
             correct_val = 0
             
-            # ★修正箇所：Markdown(**)ではなくHTML(<b>)を使用
+            # HTML(<b>)を使用
             if pattern == 1:
                 templates = [
                     f"単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れた。<br>売上推定値は？",
@@ -442,21 +442,26 @@ def main():
         st.write("")
         st.write("")
         
+        # ★ここを入れ替えました
         col1, col2 = st.columns(2)
+        
+        # col1: クイズ（4択）
         with col1:
-            st.info("📊 ストイックに練習")
-            if st.button("概算トレーニング\n(入力式)", use_container_width=True):
-                init_game_state()
-                st.session_state.page = "training"
-                st.rerun()
-            st.caption("10問セットの集中モード。")
-        with col2:
             st.success("🧩 ビジネス概算クイズ")
             if st.button("シナリオ形式\n(4択式)", use_container_width=True):
                 init_game_state()
                 st.session_state.page = "quiz"
                 st.rerun()
             st.caption("4択で瞬時に判断する実戦モード。")
+
+        # col2: トレーニング（入力）
+        with col2:
+            st.info("📊 ストイックに練習")
+            if st.button("概算トレーニング\n(入力式)", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "training"
+                st.rerun()
+            st.caption("10問セットの集中モード。")
 
         st.write("")
         st.write("")
