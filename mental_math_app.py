@@ -30,8 +30,9 @@ def format_japanese_answer(num):
     return "".join(result) if result else "0"
 
 def generate_random_number_with_unit():
-    """「10億」や「3,000万」のような表記と実数値を生成する（単位文字はつけない）"""
+    """金額用:「10億」や「3,000万」のような大きな数値を生成する"""
     base = random.randint(10, 9999) 
+    # 金額は「万」「億」になりやすい設定
     unit_type = random.choices(["", "万", "億"], weights=[1, 5, 4])[0]
     
     val = 0
@@ -47,6 +48,20 @@ def generate_random_number_with_unit():
         val = base * 100 
         label = f"{val:,}"
         
+    return val, label
+
+def generate_random_count():
+    """数量・人数用: 巨大になりすぎない数値を生成する（億は出さない）"""
+    base = random.randint(1, 9999)
+    # 数量は「単位なし」を多くし、「億」は出さない
+    unit_type = random.choices(["", "万"], weights=[8, 2])[0]
+    
+    if unit_type == "万":
+        val = base * 10000
+        label = f"{base:,}万"
+    else:
+        val = base
+        label = f"{base:,}"
     return val, label
 
 # ==========================================
@@ -67,6 +82,8 @@ def mode_training():
 
     def generate_train_problem():
         while True:
+            # トレーニングモードは桁数指定なのでそのままでOKだが
+            # バランス調整のため少し範囲を広げる
             digit_range1 = random.randint(3, 9)
             digit_range2 = random.randint(2, 6)
             
@@ -98,9 +115,7 @@ def mode_training():
             ans = st.session_state.train_num1 * st.session_state.train_num2
             diff_pct = ((user_ans - ans) / ans * 100) if ans != 0 else 0
             
-            # トレーニングモードでも計算過程を表示
             st.info(f"🧮 計算イメージ: {st.session_state.train_num1:,.0f} × {st.session_state.train_num2:,.0f} = {ans:,.0f}")
-            
             st.write(f"正解: **{format_japanese_answer(ans)}**")
             
             if abs(diff_pct) <= 20:
@@ -129,12 +144,17 @@ def mode_quiz():
         while True:
             pattern = random.choice([1, 2, 3])
             
+            # 数値生成ロジックの適正化
+            # val1: 金額など（大きくてもよい）
             val1, label1 = generate_random_number_with_unit()
-            val2, label2 = generate_random_number_with_unit()
             
-            if val1 > MAX_LIMIT or val2 > MAX_LIMIT:
-                continue
+            # val2: 個数・人数など（大きすぎると掛け算でオーバーフローするので調整）
+            if pattern in [1, 3]:
+                val2, label2 = generate_random_count() # ここで「億」を出さない関数を使う
+            else:
+                val2, label2 = generate_random_number_with_unit() # パターン2では使わないが念のため
 
+            # %の生成
             pct_num = random.choice([10, 20, 30, 40, 50, 5, 15, 25])
             pct_val = pct_num / 100.0
             
@@ -142,7 +162,7 @@ def mode_quiz():
             correct_val = 0
             
             # --- ビジネス文章のテンプレート ---
-            if pattern == 1:
+            if pattern == 1: # 金額 × 数量
                 templates = [
                     f"単価 **{label1}円** の商品が **{label2}個** 売れました。売上はいくら？",
                     f"1人あたり **{label1}円** のコストがかかる研修に **{label2}人** が参加します。総費用は？",
@@ -152,7 +172,7 @@ def mode_quiz():
                 question_text = random.choice(templates)
                 correct_val = val1 * val2
                 
-            elif pattern == 2:
+            elif pattern == 2: # 金額 × %
                 templates = [
                     f"売上高 **{label1}円** に対して、営業利益率は **{pct_num}%** です。営業利益は？",
                     f"市場規模 **{label1}円** の業界で、シェア **{pct_num}%** を獲得しました。自社の売上は？",
@@ -162,7 +182,7 @@ def mode_quiz():
                 question_text = random.choice(templates)
                 correct_val = val1 * pct_val
                 
-            elif pattern == 3:
+            elif pattern == 3: # 金額 × 数量 × %
                 templates = [
                     f"単価 **{label1}円** の商品を **{label2}個** 販売し、利益率は **{pct_num}%** でした。利益額は？",
                     f"客単価 **{label1}円** で **{label2}人** が来店し、原価率は **{pct_num}%** です。原価の総額は？",
@@ -195,7 +215,6 @@ def mode_quiz():
 
         random.shuffle(options)
         
-        # ★修正：計算過程表示のために生の値を保存しておく
         st.session_state.quiz_data = {
             "q_text": question_text,
             "correct": correct_val,
@@ -233,7 +252,6 @@ def mode_quiz():
         correct_val = q['correct']
         pattern_used = q.get('pattern', 1)
         
-        # --- ★追加：計算過程の文字列作成 ---
         calc_str = ""
         v1 = q['raw_val1']
         v2 = q['raw_val2']
@@ -246,7 +264,6 @@ def mode_quiz():
         elif pattern_used == 3:
             calc_str = f"{v1:,.0f} × {v2:,.0f} × {pct}% = {correct_val:,.0f}"
 
-        # 判定
         ratio = user_val / correct_val if correct_val != 0 else 0
         
         if 0.99 <= ratio <= 1.01: 
@@ -254,7 +271,6 @@ def mode_quiz():
         else:
             st.error(f"❌ 残念... 正解は 「{format_japanese_answer(correct_val)}」 でした。")
         
-        # 計算過程を表示（アラビア数字のみ）
         st.info(f"🧮 計算イメージ:\n{calc_str}")
 
         if st.button("次の問題へ", type="primary"):
