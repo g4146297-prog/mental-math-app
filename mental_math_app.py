@@ -22,14 +22,12 @@ def apply_custom_design():
             letter-spacing: 0.05em;
         }
         
-        /* ★変更点: ボタンのデザイン (プライマリー) - 発色を抑えた深い青 */
+        /* ボタンのデザイン (プライマリー) - 発色を抑えた深い青 */
         div.stButton > button:first-child {
-            /* 以前より深みのある青のグラデーションに変更 */
             background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
             color: white;
             border-radius: 4px;
             border: none;
-            /* 影の色も少し落ち着かせる */
             box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
             font-weight: bold;
             letter-spacing: 0.05em;
@@ -321,29 +319,30 @@ def mode_quiz():
             question_text = ""
             correct_val = 0
             
+            # ★修正箇所：Markdown(**)ではなくHTML(<b>)を使用
             if pattern == 1:
                 templates = [
-                    f"単価 **{label1}円** の商品が **{label2}個** 売れた。<br>売上推定値は？",
-                    f"1人あたり **{label1}円** のコストがかかる研修に **{label2}人** が参加します。<br>総費用推定値は？",
-                    f"月商 **{label1}円** の店舗を **{label2}店舗** 運営しています。<br>全店の月商合計は？",
-                    f"契約単価 **{label1}円** のサブスク会員が **{label2}人** います。<br>毎月の売上は？"
+                    f"単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れた。<br>売上推定値は？",
+                    f"1人あたり <b>{label1}円</b> のコストがかかる研修に <b>{label2}人</b> が参加します。<br>総費用推定値は？",
+                    f"月商 <b>{label1}円</b> の店舗を <b>{label2}店舗</b> 運営しています。<br>全店の月商合計は？",
+                    f"契約単価 <b>{label1}円</b> のサブスク会員が <b>{label2}人</b> います。<br>毎月の売上は？"
                 ]
                 question_text = random.choice(templates)
                 correct_val = val1 * val2
             elif pattern == 2:
                 templates = [
-                    f"売上高 **{label1}円** に対して、営業利益率は **{pct_num}%** です。<br>営業利益は？",
-                    f"市場規模 **{label1}円** の業界で、シェア **{pct_num}%** を獲得しました。<br>自社の売上は？",
-                    f"予算 **{label1}円** のうち、すでに **{pct_num}%** を消化しました。<br>消化した金額は？",
-                    f"投資額 **{label1}円** に対して、リターン（利回り）が **{pct_num}%** ありました。<br>利益額は？"
+                    f"売上高 <b>{label1}円</b> に対して、営業利益率は <b>{pct_num}%</b> です。<br>営業利益は？",
+                    f"市場規模 <b>{label1}円</b> の業界で、シェア <b>{pct_num}%</b> を獲得しました。<br>自社の売上は？",
+                    f"予算 <b>{label1}円</b> のうち、すでに <b>{pct_num}%</b> を消化しました。<br>消化した金額は？",
+                    f"投資額 <b>{label1}円</b> に対して、リターン（利回り）が <b>{pct_num}%</b> ありました。<br>利益額は？"
                 ]
                 question_text = random.choice(templates)
                 correct_val = val1 * pct_val
             elif pattern == 3:
                 templates = [
-                    f"単価 **{label1}円** の商品を **{label2}個** 販売し、利益率は **{pct_num}%** でした。<br>利益額は？",
-                    f"客単価 **{label1}円** で **{label2}人** が来店し、原価率は **{pct_num}%** です。<br>原価の総額は？",
-                    f"1件 **{label1}円** の案件が **{label2}件** あり、成約率は **{pct_num}%** でした。<br>成約による売上合計は？"
+                    f"単価 <b>{label1}円</b> の商品を <b>{label2}個</b> 販売し、利益率は <b>{pct_num}%</b> でした。<br>利益額は？",
+                    f"客単価 <b>{label1}円</b> で <b>{label2}人</b> が来店し、原価率は <b>{pct_num}%</b> です。<br>原価の総額は？",
+                    f"1件 <b>{label1}円</b> の案件が <b>{label2}件</b> あり、成約率は <b>{pct_num}%</b> でした。<br>成約による売上合計は？"
                 ]
                 question_text = random.choice(templates)
                 correct_val = val1 * val2 * pct_val
@@ -437,7 +436,7 @@ def main():
         init_game_state()
 
     if st.session_state.page == "home":
-        # ★変更点: タイトルを大きくし、光彩効果（テキストシャドウ）を追加
+        # タイトル
         st.markdown("<h1 style='text-align: center; color: #38BDF8; font-size: 3.5rem; text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);'>💼 ビジネス数字力道場</h1>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; color: #94A3B8;'>Advance your mental math skills with professional tools.</p>", unsafe_allow_html=True)
         st.write("")
