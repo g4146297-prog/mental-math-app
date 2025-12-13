@@ -1,5 +1,6 @@
 import streamlit as st
 import random
+import time
 
 # ==========================================
 # デザイン設定 (CSS)
@@ -84,7 +85,7 @@ MIN_LIMIT = 100
 TOTAL_QUESTIONS = 10
 
 # ==========================================
-# 共通関数: 数値フォーマット・生成
+# 共通関数
 # ==========================================
 def format_japanese_answer(num):
     try:
@@ -157,9 +158,6 @@ SCENARIOS = [
 ]
 
 def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts=None, simple_pct=None):
-    """
-    問題生成ロジック
-    """
     if simple_amounts is None: simple_amounts = not is_advanced
     if simple_pct is None: simple_pct = not is_advanced
 
@@ -237,6 +235,8 @@ def init_game_state():
     st.session_state.current_q_idx = 1
     st.session_state.score = 0
     st.session_state.exact_matches = 0
+    st.session_state.total_duration = 0.0  # ★追加: 合計時間
+    st.session_state.current_start_time = time.time() # ★追加: 現在の問題の開始時間
     st.session_state.game_finished = False
     st.session_state.quiz_data = None
     st.session_state.quiz_answered = False
@@ -248,6 +248,7 @@ def next_question():
         st.session_state.current_q_idx += 1
         st.session_state.quiz_data = None
         st.session_state.quiz_answered = False
+        st.session_state.current_start_time = time.time() # ★追加: 次の問題の開始時間セット
 
 # ==========================================
 # モード1：トレーニング (入力式)
@@ -257,12 +258,18 @@ def mode_training(advanced=False):
     st.markdown(f"## {title}")
     
     if st.session_state.game_finished:
+        # 時間計算
+        mins = int(st.session_state.total_duration // 60)
+        secs = int(st.session_state.total_duration % 60)
+        
         st.markdown(f"""
         <div class="css-card" style="text-align: center;">
             <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
             <p style="font-size: 20px; color: #E2E8F0;">TOTAL SCORE</p>
             <p style="color: #FACC15; font-weight: bold; font-size: 48px; margin: 0;">{st.session_state.score}<span style="font-size: 24px;"> / 100</span></p>
             <p style="font-size: 16px; color: #38BDF8; margin-top: 10px;">🏆 ピタリ賞: {st.session_state.exact_matches} 回</p>
+            <hr style="border-color: #334155;">
+            <p style="font-size: 18px; color: #F8FAFC;">⏱️ 合計タイム: <b>{mins}分 {secs}秒</b></p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -293,15 +300,12 @@ def mode_training(advanced=False):
         st.session_state.page = "home"
         st.rerun()
 
-    # --- 問題生成 ---
     if st.session_state.quiz_data is None:
         force_p = None
         if advanced:
-            # 上級: 後半(7-10問目)は3要素計算
             if st.session_state.current_q_idx > 6:
                 force_p = 3
         else:
-            # 基礎: 3要素計算は除外
             while True:
                 temp_q = generate_question_data(is_advanced=False)
                 if temp_q['pattern'] != 3:
@@ -309,7 +313,6 @@ def mode_training(advanced=False):
                     break
         
         if st.session_state.quiz_data is None:
-             # トレーニング（基礎）は丸めた数字、上級はリアル
              st.session_state.quiz_data = generate_question_data(is_advanced=advanced, force_pattern=force_p)
 
     q = st.session_state.quiz_data
@@ -323,7 +326,6 @@ def mode_training(advanced=False):
     
     st.write("")
     
-    # 入力フィールド
     user_ans = st.number_input(
         "概算解答を入力 (円)", 
         value=0, 
@@ -332,12 +334,15 @@ def mode_training(advanced=False):
         key=f"train_ans_{st.session_state.current_q_idx}"
     )
     
-    # ★追加: 回答提出前にカンマ付きの金額を確認できるプレビュー表示
     if user_ans > 0:
         st.markdown(f"<p style='color:#FACC15; font-weight:bold;'>入力プレビュー: {user_ans:,} 円</p>", unsafe_allow_html=True)
     
     if not st.session_state.quiz_answered:
         if st.button("答え合わせ"):
+            # ★追加: 時間計測終了
+            elapsed = time.time() - st.session_state.current_start_time
+            st.session_state.total_duration += elapsed
+            
             st.session_state.quiz_answered = True
             st.rerun()
     else:
@@ -362,6 +367,8 @@ def mode_training(advanced=False):
 
         points, diff_pct, is_perfect = calculate_score(user_ans, correct_val)
         
+        st.markdown(f"あなたの回答: **{user_ans:,}**")
+
         st.info(f"🧮 計算イメージ: {calc_str}")
         st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(correct_val)}</span> <span style='font-size: 14px; color: #888;'>({correct_val:,})</span>", unsafe_allow_html=True)
         
@@ -389,10 +396,16 @@ def mode_quiz(advanced=False):
     st.markdown(f"## {title}")
     
     if st.session_state.game_finished:
+        # 時間計算
+        mins = int(st.session_state.total_duration // 60)
+        secs = int(st.session_state.total_duration % 60)
+
         st.markdown(f"""
         <div class="css-card" style="text-align: center;">
             <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
             <p style="font-size: 24px; color: #E2E8F0;">SCORE: <span style="color: #FACC15; font-weight: bold; font-size: 32px;">{st.session_state.score}</span> / {TOTAL_QUESTIONS}</p>
+            <hr style="border-color: #334155;">
+            <p style="font-size: 18px; color: #F8FAFC;">⏱️ 合計タイム: <b>{mins}分 {secs}秒</b></p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -436,11 +449,9 @@ def mode_quiz(advanced=False):
                     break
         
         if st.session_state.quiz_data is None:
-             # クイズ（基礎）: 数字は丸めない(simple_amounts=False), %は5%刻み(simple_pct=True)
              if not advanced:
                  st.session_state.quiz_data = generate_question_data(is_advanced=False, force_pattern=force_p, simple_amounts=False, simple_pct=True)
              else:
-                 # クイズ（上級）: 全部リアル
                  st.session_state.quiz_data = generate_question_data(is_advanced=True, force_pattern=force_p)
         
         q = st.session_state.quiz_data
@@ -477,7 +488,12 @@ def mode_quiz(advanced=False):
         for i, opt in enumerate(q['options']):
             btn_label = format_japanese_answer(opt)
             target_col = col1 if i % 2 == 0 else col2
+            
+            # ★追加: 時間計測終了(ボタンクリック時)
             if target_col.button(f"{btn_label}", key=f"q_{st.session_state.current_q_idx}_opt_{i}", use_container_width=True):
+                elapsed = time.time() - st.session_state.current_start_time
+                st.session_state.total_duration += elapsed
+                
                 st.session_state.quiz_answered = True
                 st.session_state.user_choice = opt
                 st.rerun()
