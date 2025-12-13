@@ -235,4 +235,19 @@ def main():
 
         # アフィリエイト・紹介エリア
         st.divider()
-        st.subheader("📚 おすすめ
+        st.subheader("📚 おすすめの学習資料")
+        st.write("フェルミ推定や計数感覚を養うための書籍です。")
+        bk1, bk2 = st.columns(2)
+        with bk1:
+            st.markdown("Example: **外資系コンサルのフェルミ推定** ([Link](https://amazon.co.jp))")
+        with bk2:
+            st.markdown("Example: **決算書の読み方** ([Link](https://amazon.co.jp))")
+
+    elif st.session_state.page == "training":
+        mode_training()
+    
+    elif st.session_state.page == "quiz":
+        mode_quiz()
+
+if __name__ == "__main__":
+    main()
