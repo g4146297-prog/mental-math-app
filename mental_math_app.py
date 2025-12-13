@@ -1,6 +1,7 @@
 import streamlit as st
 import random
 import time
+import math
 
 # ==========================================
 # デザイン設定 (CSS)
@@ -73,6 +74,15 @@ def apply_custom_design():
         .stCaption {
             color: #94A3B8;
         }
+        /* 履歴テーブル用のスタイル */
+        .history-row {
+            background-color: #1E293B;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border-left: 3px solid #38BDF8;
+            font-size: 14px;
+        }
     </style>
     """
     st.markdown(custom_css, unsafe_allow_html=True)
@@ -85,9 +95,10 @@ MIN_LIMIT = 100
 TOTAL_QUESTIONS = 10
 
 # ==========================================
-# 共通関数
+# 共通関数: 数値フォーマット・生成
 # ==========================================
 def format_japanese_answer(num):
+    """結果表示用: 漢数字（例: 1億2000万）"""
     try:
         int_num = int(num)
     except:
@@ -104,16 +115,13 @@ def format_japanese_answer(num):
     return "".join(result) if result else "0"
 
 def format_number_with_unit_label(value):
+    """問題文表示用: 単位付き（例: 1.5万）"""
     if value >= 10**8:
-        if value % 10**8 == 0:
-            return f"{value // 10**8:,}億"
-        else:
-            return f"{value / 10**8:.1f}億".replace(".0", "")
+        if value % 10**8 == 0: return f"{value // 10**8:,}億"
+        else: return f"{value / 10**8:.1f}億".replace(".0", "")
     elif value >= 10**4:
-        if value % 10**4 == 0:
-            return f"{value // 10**4:,}万"
-        else:
-            return f"{value / 10**4:.1f}万".replace(".0", "")
+        if value % 10**4 == 0: return f"{value // 10**4:,}万"
+        else: return f"{value / 10**4:.1f}万".replace(".0", "")
     else:
         return f"{value:,}"
 
@@ -138,23 +146,23 @@ def get_random_val(min_val, max_val, simple=False):
 # ==========================================
 SCENARIOS = [
     # パターン1: A * B
-    { "pattern": 1, "template": "単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れました。<br>売上推定値は？", "range1": (100, 50000), "range2": (100, 100000) },
-    { "pattern": 1, "template": "1人あたり <b>{label1}円</b> のコストがかかる研修に <b>{label2}人</b> が参加します。<br>総費用推定値は？", "range1": (5000, 200000), "range2": (10, 5000) },
-    { "pattern": 1, "template": "月商 <b>{label1}円</b> の店舗を <b>{label2}店舗</b> 運営しています。<br>全店の月商合計は？", "range1": (1000000, 50000000), "range2": (3, 1000) },
-    { "pattern": 1, "template": "契約単価 <b>{label1}円</b> のサブスク会員が <b>{label2}人</b> います。<br>毎月の売上は？", "range1": (500, 10000), "range2": (1000, 1000000) },
+    { "pattern": 1, "template": "単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れました。<br>売上推定値は？", "range1": (100, 50000), "range2": (100, 100000), "unit1":"円", "unit2":"個" },
+    { "pattern": 1, "template": "1人あたり <b>{label1}円</b> のコストがかかる研修に <b>{label2}人</b> が参加します。<br>総費用推定値は？", "range1": (5000, 200000), "range2": (10, 5000), "unit1":"円", "unit2":"人" },
+    { "pattern": 1, "template": "月商 <b>{label1}円</b> の店舗を <b>{label2}店舗</b> 運営しています。<br>全店の月商合計は？", "range1": (1000000, 50000000), "range2": (3, 1000), "unit1":"円", "unit2":"店舗" },
+    { "pattern": 1, "template": "契約単価 <b>{label1}円</b> のサブスク会員が <b>{label2}人</b> います。<br>毎月の売上は？", "range1": (500, 10000), "range2": (1000, 1000000), "unit1":"円", "unit2":"人" },
     # パターン2: A * r
-    { "pattern": 2, "template": "売上高 <b>{label1}円</b> に対して、営業利益率は <b>{pct}%</b> です。<br>営業利益は？", "range1": (100000000, 1000000000000), "pct_range": (1, 30) },
-    { "pattern": 2, "template": "市場規模 <b>{label1}円</b> の業界で、シェア <b>{pct}%</b> を獲得しました。<br>自社の売上は？", "range1": (1000000000, 1000000000000), "pct_range": (1, 50) },
-    { "pattern": 2, "template": "予算 <b>{label1}円</b> のうち、すでに <b>{pct}%</b> を消化しました。<br>消化した金額は？", "range1": (1000000, 1000000000), "pct_range": (5, 95) },
-    { "pattern": 2, "template": "投資額 <b>{label1}円</b> に対して、リターン（利回り）が <b>{pct}%</b> ありました。<br>利益額は？", "range1": (1000000, 10000000000), "pct_range": (3, 20) },
+    { "pattern": 2, "template": "売上高 <b>{label1}円</b> に対して、営業利益率は <b>{pct}%</b> です。<br>営業利益は？", "range1": (100000000, 1000000000000), "pct_range": (1, 30), "unit1":"円" },
+    { "pattern": 2, "template": "市場規模 <b>{label1}円</b> の業界で、シェア <b>{pct}%</b> を獲得しました。<br>自社の売上は？", "range1": (1000000000, 1000000000000), "pct_range": (1, 50), "unit1":"円" },
+    { "pattern": 2, "template": "予算 <b>{label1}円</b> のうち、すでに <b>{pct}%</b> を消化しました。<br>消化した金額は？", "range1": (1000000, 1000000000), "pct_range": (5, 95), "unit1":"円" },
+    { "pattern": 2, "template": "投資額 <b>{label1}円</b> に対して、リターン（利回り）が <b>{pct}%</b> ありました。<br>利益額は？", "range1": (1000000, 10000000000), "pct_range": (3, 20), "unit1":"円" },
     # パターン3: A * B * r
-    { "pattern": 3, "template": "単価 <b>{label1}円</b> の商品を <b>{label2}個</b> 販売し、利益率は <b>{pct}%</b> でした。<br>利益額は？", "range1": (100, 20000), "range2": (100, 50000), "pct_range": (5, 40) },
-    { "pattern": 3, "template": "客単価 <b>{label1}円</b> で <b>{label2}人</b> が来店し、原価率は <b>{pct}%</b> です。<br>原価の総額は？", "range1": (500, 10000), "range2": (100, 50000), "pct_range": (20, 80) },
-    { "pattern": 3, "template": "案件単価 <b>{label1}円</b> の案件が <b>{label2}件</b> あり、成約率は <b>{pct}%</b> でした。<br>成約による売上合計は？", "range1": (100000, 5000000), "range2": (10, 500), "pct_range": (5, 50) },
+    { "pattern": 3, "template": "単価 <b>{label1}円</b> の商品を <b>{label2}個</b> 販売し、利益率は <b>{pct}%</b> でした。<br>利益額は？", "range1": (100, 20000), "range2": (100, 50000), "pct_range": (5, 40), "unit1":"円", "unit2":"個" },
+    { "pattern": 3, "template": "客単価 <b>{label1}円</b> で <b>{label2}人</b> が来店し、原価率は <b>{pct}%</b> です。<br>原価の総額は？", "range1": (500, 10000), "range2": (100, 50000), "pct_range": (20, 80), "unit1":"円", "unit2":"人" },
+    { "pattern": 3, "template": "案件単価 <b>{label1}円</b> の案件が <b>{label2}件</b> あり、成約率は <b>{pct}%</b> でした。<br>成約による売上合計は？", "range1": (100000, 5000000), "range2": (10, 500), "pct_range": (5, 50), "unit1":"円", "unit2":"件" },
     # パターン4: A * B(年)
-    { "pattern": 4, "template": "子会社株式の減損テスト。将来CF <b>{label1}円</b> が <b>{label2}</b> 続くと仮定します。<br>割引前のCF総額は？", "range1": (10000000, 5000000000), "range2": (3, 15), "suffix2": "年" },
-    { "pattern": 4, "template": "投資案件の評価。年間 <b>{label1}円</b> のリターンが <b>{label2}</b> 継続する見込みです。<br>期間累計のリターンは？", "range1": (1000000, 1000000000), "range2": (3, 20), "suffix2": "年" },
-    { "pattern": 4, "template": "新規事業のPL計画。年間固定費 <b>{label1}円</b> が <b>{label2}</b> かかる見通しです。<br>固定費の総額は？", "range1": (5000000, 500000000), "range2": (2, 5), "suffix2": "年" }
+    { "pattern": 4, "template": "子会社株式の減損テスト。将来CF <b>{label1}円</b> が <b>{label2}</b> 続くと仮定します。<br>割引前のCF総額は？", "range1": (10000000, 5000000000), "range2": (3, 15), "suffix2": "年", "unit1":"円", "unit2":"年間" },
+    { "pattern": 4, "template": "投資案件の評価。年間 <b>{label1}円</b> のリターンが <b>{label2}</b> 継続する見込みです。<br>期間累計のリターンは？", "range1": (1000000, 1000000000), "range2": (3, 20), "suffix2": "年", "unit1":"円", "unit2":"年間" },
+    { "pattern": 4, "template": "新規事業のPL計画。年間固定費 <b>{label1}円</b> が <b>{label2}</b> かかる見通しです。<br>固定費の総額は？", "range1": (5000000, 500000000), "range2": (2, 5), "suffix2": "年", "unit1":"円", "unit2":"年間" }
 ]
 
 def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts=None, simple_pct=None):
@@ -186,10 +194,12 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
     
     label1 = format_number_with_unit_label(val1)
     label2 = ""
+    suffix2 = scenario.get('suffix2', '')
+    
     if pattern in [1, 3]:
         label2 = format_number_with_unit_label(val2)
     elif pattern == 4:
-        label2 = f"{val2}{scenario.get('suffix2', '')}"
+        label2 = f"{val2}{suffix2}"
         
     correct_val = 0
     if pattern == 1: correct_val = val1 * val2
@@ -199,13 +209,41 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
 
     q_text = scenario['template'].format(label1=label1, label2=label2, pct=pct)
     
+    # 履歴保存用の単位情報など
+    unit1 = scenario.get('unit1', '')
+    unit2 = scenario.get('unit2', '')
+    if pattern == 4: unit2 = suffix2
+    
     return {
         "q_text": q_text,
         "correct": correct_val,
         "pattern": pattern,
         "raw_val1": val1, "raw_val2": val2, "raw_pct": pct,
+        "unit1": unit1, "unit2": unit2,
         "is_advanced": is_advanced
     }
+
+# ==========================================
+# タイマー表示 (JavaScript)
+# ==========================================
+def show_timer():
+    # リアルタイムで時間を表示するHTML/JSコンポーネント
+    timer_html = """
+    <div style="font-size:20px; color:#FACC15; font-weight:bold; margin-bottom:10px; font-family:monospace;">
+        ⏱️ Time: <span id="time_display">0.0</span>s
+    </div>
+    <script>
+        let start = Date.now();
+        let timer = setInterval(function() {
+            let delta = Date.now() - start;
+            let el = document.getElementById("time_display");
+            if(el) {
+                el.innerHTML = (delta / 1000).toFixed(1);
+            }
+        }, 100);
+    </script>
+    """
+    st.components.v1.html(timer_html, height=50)
 
 # ==========================================
 # スコア計算
@@ -235,11 +273,12 @@ def init_game_state():
     st.session_state.current_q_idx = 1
     st.session_state.score = 0
     st.session_state.exact_matches = 0
-    st.session_state.total_duration = 0.0  # ★追加: 合計時間
-    st.session_state.current_start_time = time.time() # ★追加: 現在の問題の開始時間
+    st.session_state.total_duration = 0.0
+    st.session_state.current_start_time = time.time()
     st.session_state.game_finished = False
     st.session_state.quiz_data = None
     st.session_state.quiz_answered = False
+    st.session_state.history = [] # 履歴保存用
 
 def next_question():
     if st.session_state.current_q_idx >= TOTAL_QUESTIONS:
@@ -248,7 +287,7 @@ def next_question():
         st.session_state.current_q_idx += 1
         st.session_state.quiz_data = None
         st.session_state.quiz_answered = False
-        st.session_state.current_start_time = time.time() # ★追加: 次の問題の開始時間セット
+        st.session_state.current_start_time = time.time()
 
 # ==========================================
 # モード1：トレーニング (入力式)
@@ -258,7 +297,7 @@ def mode_training(advanced=False):
     st.markdown(f"## {title}")
     
     if st.session_state.game_finished:
-        # 時間計算
+        # 結果発表画面
         mins = int(st.session_state.total_duration // 60)
         secs = int(st.session_state.total_duration % 60)
         
@@ -273,16 +312,23 @@ def mode_training(advanced=False):
         </div>
         """, unsafe_allow_html=True)
         
-        rate = st.session_state.score
-        if rate >= 90:
-            st.success("🏆 評価: S (神レベル) - 完璧な感覚です！")
-        elif rate >= 70:
-            st.info("🥇 評価: A (上級者) - 素晴らしい精度です。")
-        elif rate >= 40:
-            st.warning("🥈 評価: B (普通) - まずまずです。")
-        else:
-            st.error("🥉 評価: C (修行中) - 桁感覚を鍛えましょう。")
-            
+        # 履歴の表示
+        st.write("### 📝 結果詳細")
+        for h in st.session_state.history:
+            st.markdown(f"""
+            <div class="history-row">
+                <span style="color:{'#FACC15' if h['points']>=8 else '#94A3B8'}; font-weight:bold; margin-right:10px;">
+                    {h['result_label']}
+                </span>
+                <span style="color:#E2E8F0; margin-right:15px;">
+                    {h['formula_kanji']}
+                </span>
+                <span style="color:#38BDF8; float:right;">
+                    {h['time']:.1f}s
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+
         c1, c2 = st.columns(2)
         if c1.button("もう一度挑戦", type="primary"):
             init_game_state()
@@ -300,11 +346,11 @@ def mode_training(advanced=False):
         st.session_state.page = "home"
         st.rerun()
 
+    # 問題生成
     if st.session_state.quiz_data is None:
         force_p = None
         if advanced:
-            if st.session_state.current_q_idx > 6:
-                force_p = 3
+            if st.session_state.current_q_idx > 6: force_p = 3
         else:
             while True:
                 temp_q = generate_question_data(is_advanced=False)
@@ -324,7 +370,9 @@ def mode_training(advanced=False):
     </div>
     """, unsafe_allow_html=True)
     
-    st.write("")
+    # タイマー表示 (回答済みの場合は表示しない)
+    if not st.session_state.quiz_answered:
+        show_timer()
     
     user_ans = st.number_input(
         "概算解答を入力 (円)", 
@@ -339,37 +387,58 @@ def mode_training(advanced=False):
     
     if not st.session_state.quiz_answered:
         if st.button("答え合わせ"):
-            # ★追加: 時間計測終了
+            # 時間計測
             elapsed = time.time() - st.session_state.current_start_time
             st.session_state.total_duration += elapsed
-            
+            st.session_state.current_q_time = elapsed # 今回の時間保持
             st.session_state.quiz_answered = True
             st.rerun()
     else:
         correct_val = q['correct']
-        pattern_used = q['pattern']
         v1 = q['raw_val1']
         v2 = q['raw_val2']
         pct = q['raw_pct']
+        pat = q['pattern']
+        u1 = q['unit1']
+        u2 = q['unit2']
         
-        lbl1 = format_number_with_unit_label(v1)
-        calc_str = ""
-        if pattern_used == 1: 
-            lbl2 = format_number_with_unit_label(v2)
-            calc_str = f"{lbl1} × {lbl2} = {format_japanese_answer(correct_val)}"
-        elif pattern_used == 2: 
-            calc_str = f"{lbl1} × {pct}% = {format_japanese_answer(correct_val)}"
-        elif pattern_used == 3: 
-            lbl2 = format_number_with_unit_label(v2)
-            calc_str = f"{lbl1} × {lbl2} × {pct}% = {format_japanese_answer(correct_val)}"
-        elif pattern_used == 4: 
-            calc_str = f"{lbl1} × {v2}年 = {format_japanese_answer(correct_val)}"
+        # === アラビア数字での計算式 (解説用) ===
+        calc_str_arabic = ""
+        if pat == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
+        elif pat == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
+        elif pat == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
+        elif pat == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
+
+        # === 漢数字での計算式 (履歴用) ===
+        f_v1 = format_japanese_answer(v1) + u1
+        f_ans = format_japanese_answer(correct_val) + "円" # 答えは円固定
+        calc_str_kanji = ""
+        
+        if pat == 1: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+        elif pat == 2: 
+            calc_str_kanji = f"{f_v1} × {pct}% ＝ {f_ans}"
+        elif pat == 3: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} × {pct}% ＝ {f_ans}"
+        elif pat == 4: 
+            f_v2 = f"{v2}{u2}"
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
 
         points, diff_pct, is_perfect = calculate_score(user_ans, correct_val)
         
-        st.markdown(f"あなたの回答: **{user_ans:,}**")
+        # 履歴に追加 (まだ追加していなければ)
+        if len(st.session_state.history) < st.session_state.current_q_idx:
+            st.session_state.history.append({
+                "result_label": f"{points}点",
+                "points": points,
+                "formula_kanji": calc_str_kanji,
+                "time": st.session_state.current_q_time
+            })
 
-        st.info(f"🧮 計算イメージ: {calc_str}")
+        st.markdown(f"あなたの回答: **{user_ans:,}**")
+        st.info(f"🧮 計算イメージ: {calc_str_arabic}")
         st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(correct_val)}</span> <span style='font-size: 14px; color: #888;'>({correct_val:,})</span>", unsafe_allow_html=True)
         
         if is_perfect:
@@ -383,8 +452,7 @@ def mode_training(advanced=False):
 
         if st.button("次の問題へ", type="primary"):
             st.session_state.score += points
-            if is_perfect:
-                st.session_state.exact_matches += 1
+            if is_perfect: st.session_state.exact_matches += 1
             next_question()
             st.rerun()
 
@@ -396,7 +464,6 @@ def mode_quiz(advanced=False):
     st.markdown(f"## {title}")
     
     if st.session_state.game_finished:
-        # 時間計算
         mins = int(st.session_state.total_duration // 60)
         secs = int(st.session_state.total_duration % 60)
 
@@ -419,6 +486,24 @@ def mode_quiz(advanced=False):
         else:
             st.error("🥉 評価: 新人級 - まずは単位を覚えましょう。")
         
+        # 履歴の表示
+        st.write("### 📝 結果詳細")
+        for h in st.session_state.history:
+            icon = "⭕" if h['is_correct'] else "❌"
+            st.markdown(f"""
+            <div class="history-row">
+                <span style="color:{'#FACC15' if h['is_correct'] else '#EF4444'}; font-weight:bold; font-size:18px; margin-right:10px;">
+                    {icon}
+                </span>
+                <span style="color:#E2E8F0; margin-right:15px;">
+                    {h['formula_kanji']}
+                </span>
+                <span style="color:#38BDF8; float:right;">
+                    {h['time']:.1f}s
+                </span>
+            </div>
+            """, unsafe_allow_html=True)
+        
         c1, c2 = st.columns(2)
         if c1.button("もう一度挑戦", type="primary"):
             init_game_state()
@@ -439,8 +524,7 @@ def mode_quiz(advanced=False):
     if st.session_state.quiz_data is None:
         force_p = None
         if advanced:
-            if st.session_state.current_q_idx > 6:
-                force_p = 3
+            if st.session_state.current_q_idx > 6: force_p = 3
         else:
             while True:
                 temp_q = generate_question_data(is_advanced=False)
@@ -483,16 +567,20 @@ def mode_quiz(advanced=False):
     </div>
     """, unsafe_allow_html=True)
 
+    # タイマー表示
+    if not st.session_state.quiz_answered:
+        show_timer()
+
     if not st.session_state.quiz_answered:
         col1, col2 = st.columns(2)
         for i, opt in enumerate(q['options']):
             btn_label = format_japanese_answer(opt)
             target_col = col1 if i % 2 == 0 else col2
             
-            # ★追加: 時間計測終了(ボタンクリック時)
             if target_col.button(f"{btn_label}", key=f"q_{st.session_state.current_q_idx}_opt_{i}", use_container_width=True):
                 elapsed = time.time() - st.session_state.current_start_time
                 st.session_state.total_duration += elapsed
+                st.session_state.current_q_time = elapsed
                 
                 st.session_state.quiz_answered = True
                 st.session_state.user_choice = opt
@@ -500,35 +588,54 @@ def mode_quiz(advanced=False):
     else:
         user_val = st.session_state.user_choice
         correct_val = q['correct']
-        pattern_used = q['pattern']
-        
-        calc_str = ""
         v1 = q['raw_val1']
         v2 = q['raw_val2']
         pct = q['raw_pct']
-        lbl1 = format_number_with_unit_label(v1)
+        pat = q['pattern']
+        u1 = q['unit1']
+        u2 = q['unit2']
         
-        if pattern_used == 1: 
-            lbl2 = format_number_with_unit_label(v2)
-            calc_str = f"{lbl1} × {lbl2} = {format_japanese_answer(correct_val)}"
-        elif pattern_used == 2: 
-            calc_str = f"{lbl1} × {pct}% = {format_japanese_answer(correct_val)}"
-        elif pattern_used == 3: 
-            lbl2 = format_number_with_unit_label(v2)
-            calc_str = f"{lbl1} × {lbl2} × {pct}% = {format_japanese_answer(correct_val)}"
-        elif pattern_used == 4: 
-            calc_str = f"{lbl1} × {v2}年 = {format_japanese_answer(correct_val)}"
+        # === アラビア数字 (解説用) ===
+        calc_str_arabic = ""
+        if pat == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
+        elif pat == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
+        elif pat == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
+        elif pat == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
+
+        # === 漢数字 (履歴用) ===
+        f_v1 = format_japanese_answer(v1) + u1
+        f_ans = format_japanese_answer(correct_val) + "円"
+        calc_str_kanji = ""
+        
+        if pat == 1: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+        elif pat == 2: 
+            calc_str_kanji = f"{f_v1} × {pct}% ＝ {f_ans}"
+        elif pat == 3: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} × {pct}% ＝ {f_ans}"
+        elif pat == 4: 
+            f_v2 = f"{v2}{u2}"
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
 
         ratio = user_val / correct_val if correct_val != 0 else 0
-        is_correct = False
+        is_correct = (0.99 <= ratio <= 1.01)
         
-        if 0.99 <= ratio <= 1.01: 
+        # 履歴に追加
+        if len(st.session_state.history) < st.session_state.current_q_idx:
+            st.session_state.history.append({
+                "is_correct": is_correct,
+                "formula_kanji": calc_str_kanji,
+                "time": st.session_state.current_q_time
+            })
+        
+        if is_correct: 
             st.success("🎉 正解！")
-            is_correct = True
         else:
             st.error(f"❌ 不正解... 正解は 「{format_japanese_answer(correct_val)}」")
         
-        st.info(f"🧮 計算イメージ: {calc_str}")
+        st.info(f"🧮 計算イメージ: {calc_str_arabic}")
 
         if st.button("次の問題へ", type="primary"):
             if is_correct: st.session_state.score += 1
