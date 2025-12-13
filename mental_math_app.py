@@ -2,29 +2,44 @@ import streamlit as st
 import random
 
 # ==========================================
+# 定数設定
+# ==========================================
+MAX_LIMIT = 10**12  # 上限: 1兆
+MIN_LIMIT = 100     # 下限: 100 (0や極小値を防ぐ)
+
+# ==========================================
 # 共通関数：数値のフォーマットなど
 # ==========================================
 def format_japanese_answer(num):
     """解答表示用のフォーマット（例: 1兆2000億円）"""
-    if num == 0: return "0"
+    int_num = int(num)
+    
+    if int_num == 0:
+        return "0"
+        
     units = [(10**12, "兆"), (10**8, "億"), (10**4, "万"), (1, "")]
     result = []
-    remaining = abs(int(num))
+    remaining = abs(int_num)
+    
     for unit_val, unit_name in units:
         if remaining >= unit_val:
             val = remaining // unit_val
             remaining %= unit_val
             result.append(f"{val:,}{unit_name}")
+            
     return "".join(result) if result else "0"
 
 def generate_random_number_with_unit():
     """「10億円」や「8千」のような表記と実数値を生成する"""
-    # 1〜999の数字
-    base = random.randint(1, 150) # 暗算しやすいよう少し範囲調整
+    # ベースの数字（10〜999）
+    base = random.randint(10, 999) 
     
     # 単位の決定
-    unit_type = random.choice(["", "万", "億"])
+    unit_type = random.choices(["", "万", "億"], weights=[1, 5, 4])[0]
     
+    val = 0
+    label = ""
+
     if unit_type == "億":
         val = base * (10**8)
         label = f"{base}億"
@@ -32,8 +47,8 @@ def generate_random_number_with_unit():
         val = base * (10**4)
         label = f"{base}万"
     else:
-        val = base
-        label = f"{base}"
+        val = base * 100 
+        label = f"{base}00"
         
     return val, label
 
@@ -55,11 +70,22 @@ def mode_training():
         st.session_state.train_active = False
 
     def generate_train_problem():
-        digit_range1 = random.randint(3, 10)
-        digit_range2 = random.randint(2, 6)
-        st.session_state.train_num1 = random.randint(10**(digit_range1-1), 10**digit_range1)
-        st.session_state.train_num2 = random.randint(10**(digit_range2-1), 10**digit_range2)
-        st.session_state.train_active = True
+        # 条件（1兆以下）を満たすまで再抽選するループ
+        while True:
+            digit_range1 = random.randint(3, 9) # 桁数を少し調整
+            digit_range2 = random.randint(2, 6)
+            
+            num1 = random.randint(10**(digit_range1-1), 10**digit_range1)
+            num2 = random.randint(10**(digit_range2-1), 10**digit_range2)
+            
+            ans = num1 * num2
+            
+            # 1兆以下なら採用してループを抜ける
+            if ans <= MAX_LIMIT:
+                st.session_state.train_num1 = num1
+                st.session_state.train_num2 = num2
+                st.session_state.train_active = True
+                break
 
     if st.button("新しい問題を出題", type="primary"):
         generate_train_problem()
@@ -98,56 +124,61 @@ def mode_quiz():
         st.session_state.page = "home"
         st.rerun()
 
-    # セッション初期化
     if 'quiz_data' not in st.session_state:
         st.session_state.quiz_data = None
         st.session_state.quiz_answered = False
 
     # クイズ生成関数
     def generate_quiz():
-        pattern = random.choice([1, 2, 3])
-        
-        # 数値生成（AとB）
-        val1, label1 = generate_random_number_with_unit()
-        val2, label2 = generate_random_number_with_unit()
-        
-        # パーセント生成（10%, 20%... 90%）
-        pct_num = random.choice([10, 20, 30, 40, 50, 5, 15, 25])
-        pct_val = pct_num / 100.0
-        
-        question_text = ""
-        correct_val = 0
-        
-        # --- パターン分岐 ---
-        # パターン①（数字＋単位）＊（数字＋単位）
-        if pattern == 1:
-            # 単位などを少し調整（個、円など）
-            label2 += random.choice(["個", "円", "人"])
-            question_text = f"{label1} × {label2}"
-            correct_val = val1 * val2
+        # ★修正ポイント: 条件（100以上 1兆以下）を満たすまで再抽選
+        while True:
+            pattern = random.choice([1, 2, 3])
             
-        # パターン②（数字＋単位）＊ ％
-        elif pattern == 2:
-            question_text = f"{label1}円 × {pct_num}%"
-            correct_val = val1 * pct_val
+            val1, label1 = generate_random_number_with_unit()
+            val2, label2 = generate_random_number_with_unit()
             
-        # パターン③（数字＋単位）＊（数字＋単位）＊ ％
-        elif pattern == 3:
-            label2 += "個" # 文脈として自然にするため
-            question_text = f"{label1}円 × {label2} × {pct_num}%"
-            correct_val = val1 * val2 * pct_val
+            # 各要素単体でも1兆を超えていないか念のためチェック
+            if val1 > MAX_LIMIT or val2 > MAX_LIMIT:
+                continue
 
-        # 選択肢の生成（正解から桁をずらす）
+            pct_num = random.choice([10, 20, 30, 40, 50, 5, 15, 25])
+            pct_val = pct_num / 100.0
+            
+            question_text = ""
+            correct_val = 0
+            
+            if pattern == 1:
+                label2 += random.choice(["個", "円", "人"])
+                question_text = f"{label1} × {label2}"
+                correct_val = val1 * val2
+                
+            elif pattern == 2:
+                question_text = f"{label1}円 × {pct_num}%"
+                correct_val = val1 * pct_val
+                
+            elif pattern == 3:
+                label2 += "個"
+                question_text = f"{label1}円 × {label2} × {pct_num}%"
+                correct_val = val1 * val2 * pct_val
+            
+            # ★判定: 100以上 かつ 1兆以下 ならOK
+            if MIN_LIMIT <= correct_val <= MAX_LIMIT: 
+                break
+
+        # 選択肢の生成
         options = []
         options.append(correct_val) # 正解
         options.append(correct_val * 10) # 1桁大きい
         options.append(correct_val / 10) # 1桁小さい
         
-        # 4つ目はランダムに2桁ズレなどを入れる
-        fourth_option = random.choice([correct_val * 100, correct_val / 100])
+        # 4つ目の選択肢
+        # 正解が100兆に近い(1兆ギリギリ)場合、100倍すると大きすぎるので1/100にするなど調整
+        if correct_val * 100 > MAX_LIMIT * 10: # 許容範囲を超えるなら小さくする
+            fourth_option = correct_val / 100
+        else:
+            fourth_option = random.choice([correct_val * 100, correct_val / 100])
+            
         options.append(fourth_option)
-        
-        # シャッフル
         random.shuffle(options)
         
         st.session_state.quiz_data = {
@@ -157,41 +188,35 @@ def mode_quiz():
         }
         st.session_state.quiz_answered = False
 
-    # 初回または「次へ」ボタンで問題生成
     if st.session_state.quiz_data is None:
         generate_quiz()
 
-    # --- UI表示 ---
     q = st.session_state.quiz_data
     
     st.markdown("### 問題")
     st.markdown(f"## {q['q_text']} = ?")
     
-    st.write("") # スペーサー
+    st.write("")
 
-    # 4択ボタンを表示
     if not st.session_state.quiz_answered:
         col1, col2 = st.columns(2)
         for i, opt in enumerate(q['options']):
-            # ボタンのラベル（日本語単位に変換）
             btn_label = format_japanese_answer(opt)
-            
-            # 列の振り分け
             target_col = col1 if i % 2 == 0 else col2
             
             if target_col.button(f"{btn_label}", key=f"opt_{i}", use_container_width=True):
-                # 解答判定
                 st.session_state.quiz_answered = True
                 st.session_state.user_choice = opt
                 st.rerun()
     
     else:
-        # 解答後の結果表示
         user_val = st.session_state.user_choice
         correct_val = q['correct']
         
-        # 誤差が非常に小さい（浮動小数点対策）場合を正解とする
-        if abs(user_val - correct_val) < 1.0: 
+        # 判定（桁ズレ比較）
+        ratio = user_val / correct_val if correct_val != 0 else 0
+        
+        if 0.99 <= ratio <= 1.01: 
             st.success("🎉 正解！ お見事です。")
         else:
             st.error(f"❌ 残念... 正解は 「{format_japanese_answer(correct_val)}」 でした。")
@@ -202,7 +227,7 @@ def mode_quiz():
             st.rerun()
 
 # ==========================================
-# トップページ（メニュー分岐）
+# トップページ
 # ==========================================
 def main():
     st.set_page_config(page_title="ビジネス数字力道場", page_icon="💼")
@@ -210,7 +235,6 @@ def main():
     if 'page' not in st.session_state:
         st.session_state.page = "home"
 
-    # ページルーティング
     if st.session_state.page == "home":
         st.title("💼 ビジネス数字力道場")
         st.markdown("ビジネスに必要な「数字の規模感」と「暗算力」を鍛えるアプリです。")
@@ -233,7 +257,6 @@ def main():
                 st.rerun()
             st.caption("新機能！「10億円×30%」などの計算結果を、正しい桁の選択肢から選びます。")
 
-        # アフィリエイト・紹介エリア
         st.divider()
         st.subheader("📚 おすすめの学習資料")
         st.write("フェルミ推定や計数感覚を養うための書籍です。")
