@@ -287,16 +287,29 @@ def mode_quiz(advanced=False):
 
     if st.session_state.quiz_data is None:
         while True:
-            pattern = random.choice([1, 2, 3])
+            # ★問題パターンの恣意的な制御ロジック
+            # 第1問〜第6問: 基礎編 [パターン1(個数), 2(%), 4(年数)]
+            if st.session_state.current_q_idx <= 6:
+                pattern = random.choice([1, 2, 4])
+            # 第7問〜第10問: 応用編 [パターン3(3要素計算)]
+            else:
+                pattern = 3
+
+            # val1生成（金額）
             val1, label1 = generate_random_number_with_unit()
-            if pattern in [1, 3]:
+            
+            # val2生成（パターンによって個数か年数か分岐）
+            if pattern == 4:
+                val2 = random.randint(3, 15)
+                label2 = f"{val2}年"
+            elif pattern in [1, 3]:
                 val2, label2 = generate_random_count()
             else:
-                val2, label2 = generate_random_number_with_unit()
+                val2, label2 = generate_random_number_with_unit() # ダミー
 
-            # --- 上級モードの変更点②: %は1%刻み ---
+            # %生成
             if advanced:
-                pct_num = random.randint(1, 99) # 1〜99%のランダム
+                pct_num = random.randint(1, 99)
             else:
                 pct_num = random.choice([10, 20, 30, 40, 50, 5, 15, 25])
             
@@ -305,6 +318,7 @@ def mode_quiz(advanced=False):
             question_text = ""
             correct_val = 0
             
+            # --- 問題文分岐 ---
             if pattern == 1:
                 templates = [
                     f"単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れた。<br>売上推定値は？",
@@ -331,6 +345,15 @@ def mode_quiz(advanced=False):
                 ]
                 question_text = random.choice(templates)
                 correct_val = val1 * val2 * pct_val
+            elif pattern == 4:
+                templates = [
+                    f"子会社株式の減損テスト。将来CF <b>{label1}円</b> が <b>{label2}</b> 続くと仮定します。<br>割引前のCF総額は？",
+                    f"投資案件の評価。年間 <b>{label1}円</b> のリターンが <b>{label2}</b> 継続する見込みです。<br>期間累計のリターンは？",
+                    f"のれんの減損判定。事業計画では年間 <b>{label1}円</b> の利益が <b>{label2}</b> 発生します。<br>この期間の利益合計は？",
+                    f"新規事業のPL計画。年間固定費 <b>{label1}円</b> が <b>{label2}</b> かかる見通しです。<br>固定費の総額は？"
+                ]
+                question_text = random.choice(templates)
+                correct_val = val1 * val2
             
             if MIN_LIMIT <= correct_val <= MAX_LIMIT: 
                 break
@@ -338,16 +361,13 @@ def mode_quiz(advanced=False):
         options = []
         options.append(correct_val)
         
-        # --- 上級モードの変更点①: 全パターンで5%刻みの選択肢 ---
+        # --- 選択肢生成 ---
         if advanced:
-            # 正解に対し、±5%, ±10%, ±15% の中からランダムに3つ選ぶ
-            # 係数を定義: 0.85 (-15%) ～ 1.15 (+15%)
             multipliers = [0.85, 0.90, 0.95, 1.05, 1.10, 1.15]
             selected_mults = random.sample(multipliers, 3)
             for m in selected_mults:
                 options.append(correct_val * m)
         else:
-            # 通常モードの選択肢生成
             if pattern == 2:
                 opt_minus_20 = correct_val * 0.8
                 opt_plus_20  = correct_val * 1.2
@@ -404,11 +424,11 @@ def mode_quiz(advanced=False):
         if pattern_used == 1: calc_str = f"{v1:,.0f} × {v2:,.0f} = {correct_val:,.0f}"
         elif pattern_used == 2: calc_str = f"{v1:,.0f} × {pct}% = {correct_val:,.0f}"
         elif pattern_used == 3: calc_str = f"{v1:,.0f} × {v2:,.0f} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 4: calc_str = f"{v1:,.0f} × {v2}年 = {correct_val:,.0f}"
 
         ratio = user_val / correct_val if correct_val != 0 else 0
         is_correct = False
         
-        # 判定（上級でも選択肢ベースなので同じ判定ロジックでOK）
         if 0.99 <= ratio <= 1.01: 
             st.success("🎉 正解！")
             is_correct = True
