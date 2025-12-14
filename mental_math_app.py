@@ -10,6 +10,7 @@ from datetime import datetime
 # ==========================================
 RANKING_FILE = "ranking.csv"
 MAX_LIMIT = 10**13
+MIN_LIMIT = 100
 TOTAL_QUESTIONS = 10
 
 # ==========================================
@@ -242,7 +243,7 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
                 pct = random.randint(min_p, max_p)
                 if pct not in excluded_pct: break
     
-    # 基礎編は単位付き、上級編はカンマ区切り
+    # 上級編はカンマ区切り、基礎編は単位付き
     if simple_amounts:
         label1 = format_number_with_unit_label(val1)
     else:
@@ -262,4 +263,485 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
     correct_val = 0
     if pattern == 1: correct_val = val1 * val2
     elif pattern == 2: correct_val = val1 * (pct / 100.0)
-    elif pattern ==
+    elif pattern == 3: correct_val = val1 * val2 * (pct / 100.0)
+    elif pattern == 4: correct_val = val1 * val2
+
+    q_text = scenario['template'].format(label1=label1, label2=label2, pct=pct)
+    
+    unit1 = scenario.get('unit1', '')
+    unit2 = scenario.get('unit2', '')
+    if pattern == 4: unit2 = suffix2
+    
+    return {
+        "q_text": q_text,
+        "correct": correct_val,
+        "pattern": pattern,
+        "raw_val1": val1, "raw_val2": val2, "raw_pct": pct,
+        "unit1": unit1, "unit2": unit2,
+        "is_advanced": is_advanced
+    }
+
+# ==========================================
+# タイマー表示 (JavaScript)
+# ==========================================
+def show_timer():
+    timer_html = """
+    <div style="font-size:20px; color:#FACC15; font-weight:bold; margin-bottom:10px; font-family:monospace;">
+        ⏱️ Time: <span id="time_display">0.0</span>s
+    </div>
+    <script>
+        let start = Date.now();
+        let timer = setInterval(function() {
+            let delta = Date.now() - start;
+            let el = document.getElementById("time_display");
+            if(el) {
+                el.innerHTML = (delta / 1000).toFixed(1);
+            }
+        }, 100);
+    </script>
+    """
+    st.components.v1.html(timer_html, height=50)
+
+# ==========================================
+# スコア計算
+# ==========================================
+def calculate_score(user_val, correct_val):
+    if correct_val == 0: return 0, 0.0, False
+    diff_pct = abs((user_val - correct_val) / correct_val * 100)
+    is_perfect = (user_val == correct_val)
+    points = 0
+    if diff_pct <= 2: points = 10
+    elif diff_pct <= 4: points = 9
+    elif diff_pct <= 6: points = 8
+    elif diff_pct <= 8: points = 7
+    elif diff_pct <= 10: points = 6
+    elif diff_pct <= 12: points = 5
+    elif diff_pct <= 14: points = 4
+    elif diff_pct <= 16: points = 3
+    elif diff_pct <= 18: points = 2
+    elif diff_pct <= 20: points = 1
+    else: points = 0
+    return points, diff_pct, is_perfect
+
+# ==========================================
+# ゲーム進行管理
+# ==========================================
+def init_game_state():
+    st.session_state.current_q_idx = 1
+    st.session_state.score = 0
+    st.session_state.exact_matches = 0
+    st.session_state.total_duration = 0.0
+    st.session_state.current_start_time = time.time()
+    st.session_state.game_finished = False
+    st.session_state.quiz_data = None
+    st.session_state.quiz_answered = False
+    st.session_state.history = []
+    st.session_state.ranked_in = False
+
+def next_question():
+    if st.session_state.current_q_idx >= TOTAL_QUESTIONS:
+        st.session_state.game_finished = True
+    else:
+        st.session_state.current_q_idx += 1
+        st.session_state.quiz_data = None
+        st.session_state.quiz_answered = False
+        st.session_state.current_start_time = time.time()
+
+# ==========================================
+# 結果画面共通処理
+# ==========================================
+def show_result_screen(mode_name):
+    mins = int(st.session_state.total_duration // 60)
+    secs = int(st.session_state.total_duration % 60)
+    
+    st.markdown(f"""
+    <div class="css-card" style="text-align: center;">
+        <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
+        <p style="font-size: 20px; color: #E2E8F0;">TOTAL SCORE</p>
+        <p style="color: #FACC15; font-weight: bold; font-size: 48px; margin: 0;">{st.session_state.score}<span style="font-size: 24px;"> / 100</span></p>
+        {'<p style="font-size: 16px; color: #38BDF8; margin-top: 10px;">🏆 ピタリ賞: ' + str(st.session_state.exact_matches) + ' 回</p>' if 'チャレンジ' in mode_name else ''}
+        <hr style="border-color: #334155;">
+        <p style="font-size: 18px; color: #F8FAFC;">⏱️ 合計タイム: <b>{mins}分 {secs}秒</b></p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # --- ランキング登録フォーム ---
+    if not st.session_state.ranked_in:
+        with st.container():
+            st.markdown("### 🏆 ランキングに登録")
+            c1, c2 = st.columns([3, 1])
+            nickname = c1.text_input("ニックネームを入力", placeholder="名無しさん")
+            if c2.button("登録する", type="primary"):
+                if not nickname: nickname = "名無しさん"
+                save_ranking(nickname, mode_name, st.session_state.score, st.session_state.total_duration)
+                st.session_state.ranked_in = True
+                st.rerun()
+    else:
+        st.success("ランキングに登録しました！")
+        st.markdown(f"### 📊 {mode_name} のランキング")
+        display_ranking(filter_mode=mode_name)
+
+    # --- 履歴詳細 ---
+    st.markdown("---")
+    st.write("### 📝 結果詳細")
+    for h in st.session_state.history:
+        label = h['result_label']
+        # 文字色: 正解/高得点は黄色、不正解/低得点は赤やグレー
+        color = '#FACC15' if ('⭕' in label or '点' in label and int(label.replace('点',''))>=8) else '#EF4444'
+        
+        st.markdown(f"""
+        <div class="history-row">
+            <span style="color:{color}; font-weight:bold; margin-right:10px; min-width:50px;">
+                {label}
+            </span>
+            <span style="color:#E2E8F0; margin-right:15px; flex-grow:1;">
+                {h['formula_kanji']}
+            </span>
+            <span style="color:#38BDF8; font-family:monospace;">
+                {h['time']:.1f}s
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.write("")
+    c1, c2 = st.columns(2)
+    if c1.button("もう一度挑戦", type="primary"):
+        init_game_state()
+        st.rerun()
+    if c2.button("トップに戻る"):
+        st.session_state.page = "home"
+        st.rerun()
+
+# ==========================================
+# モード1：チャレンジモード (入力式)
+# ==========================================
+def mode_training(advanced=False):
+    mode_name = "チャレンジ(上級)" if advanced else "チャレンジ(基礎)"
+    st.markdown(f"## 💪 {mode_name}")
+    
+    if st.session_state.game_finished:
+        show_result_screen(mode_name)
+        return
+
+    progress = st.session_state.current_q_idx / TOTAL_QUESTIONS
+    st.progress(progress)
+    st.caption(f"Q.{st.session_state.current_q_idx} / {TOTAL_QUESTIONS} | Score: {st.session_state.score}")
+    
+    if st.button("トップに戻る（中断）"):
+        st.session_state.page = "home"
+        st.rerun()
+
+    if st.session_state.quiz_data is None:
+        force_p = None
+        if advanced:
+            if st.session_state.current_q_idx > 6: force_p = 3
+        else:
+            while True:
+                temp_q = generate_question_data(is_advanced=False)
+                if temp_q['pattern'] != 3:
+                    st.session_state.quiz_data = temp_q
+                    break
+        
+        if st.session_state.quiz_data is None:
+             st.session_state.quiz_data = generate_question_data(is_advanced=advanced, force_pattern=force_p)
+
+    q = st.session_state.quiz_data
+
+    st.markdown(f"""
+    <div class="css-card">
+        <h3 style="margin-top:0; color: #38BDF8;">Question</h3>
+        <p style="font-size: 18px; line-height: 1.6; color: #F1F5F9;">{q['q_text']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if not st.session_state.quiz_answered:
+        show_timer()
+    
+    user_ans = st.number_input(
+        "概算解答を入力 (円)", 
+        value=0, 
+        step=1, 
+        format="%d",
+        key=f"train_ans_{st.session_state.current_q_idx}"
+    )
+    
+    if user_ans > 0:
+        st.markdown(f"<p style='color:#FACC15; font-weight:bold;'>入力プレビュー: {user_ans:,} 円</p>", unsafe_allow_html=True)
+    
+    if not st.session_state.quiz_answered:
+        if st.button("答え合わせ"):
+            elapsed = time.time() - st.session_state.current_start_time
+            st.session_state.total_duration += elapsed
+            st.session_state.current_q_time = elapsed
+            st.session_state.quiz_answered = True
+            st.rerun()
+    else:
+        correct_val = q['correct']
+        pattern_used = q['pattern']
+        v1 = q['raw_val1']
+        v2 = q['raw_val2']
+        pct = q['raw_pct']
+        u1 = q['unit1']
+        u2 = q['unit2']
+        
+        # 解説用（アラビア数字）
+        calc_str_arabic = ""
+        if pattern_used == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
+        elif pattern_used == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
+
+        # 履歴用（漢数字+単位）
+        f_v1 = format_japanese_answer(v1) + u1
+        f_ans = format_japanese_answer(correct_val) + "円"
+        calc_str_kanji = ""
+        if pattern_used == 1: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+        elif pattern_used == 2: 
+            calc_str_kanji = f"{f_v1} × {pct}% ＝ {f_ans}"
+        elif pattern_used == 3: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} × {pct}% ＝ {f_ans}"
+        elif pattern_used == 4: 
+            f_v2 = f"{v2}{u2}"
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+
+        points, diff_pct, is_perfect = calculate_score(user_ans, correct_val)
+        
+        if len(st.session_state.history) < st.session_state.current_q_idx:
+            st.session_state.history.append({
+                "result_label": f"{points}点",
+                "points": points,
+                "formula_kanji": calc_str_kanji,
+                "time": st.session_state.current_q_time
+            })
+
+        st.markdown(f"あなたの回答: **{user_ans:,}**")
+        st.info(f"🧮 計算イメージ: {calc_str_arabic}")
+        st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(correct_val)}</span> <span style='font-size: 14px; color: #888;'>({correct_val:,})</span>", unsafe_allow_html=True)
+        
+        if is_perfect:
+            st.markdown(f"<div style='background-color:rgba(250, 204, 21, 0.2); padding:10px; border-radius:5px; text-align:center; color:#FACC15; font-weight:bold; margin-bottom:10px;'>🏆 ピタリ賞！ 獲得ポイント: {points}点</div>", unsafe_allow_html=True)
+        elif points >= 8:
+            st.success(f"⭕ 素晴らしい！ 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
+        elif points >= 1:
+            st.warning(f"🔺 まずまず！ 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
+        else:
+            st.error(f"❌ 残念... 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
+
+        if st.button("次の問題へ", type="primary"):
+            st.session_state.score += points
+            if is_perfect: st.session_state.exact_matches += 1
+            next_question()
+            st.rerun()
+
+# ==========================================
+# モード2：お気軽モード (4択式)
+# ==========================================
+def mode_quiz(advanced=False):
+    mode_name = "お気軽(上級)" if advanced else "お気軽(基礎)"
+    st.markdown(f"## 🧩 {mode_name}")
+    
+    if st.session_state.game_finished:
+        show_result_screen(mode_name)
+        return
+
+    progress = st.session_state.current_q_idx / TOTAL_QUESTIONS
+    st.progress(progress)
+    st.caption(f"Q.{st.session_state.current_q_idx} / {TOTAL_QUESTIONS} | Score: {st.session_state.score}")
+
+    if st.button("トップに戻る（中断）"):
+        st.session_state.page = "home"
+        st.rerun()
+
+    if st.session_state.quiz_data is None:
+        force_p = None
+        if advanced:
+            if st.session_state.current_q_idx > 6: force_p = 3
+        else:
+            while True:
+                temp_q = generate_question_data(is_advanced=False)
+                if temp_q['pattern'] != 3:
+                    st.session_state.quiz_data = temp_q
+                    break
+        
+        if st.session_state.quiz_data is None:
+             if not advanced:
+                 st.session_state.quiz_data = generate_question_data(is_advanced=False, force_pattern=force_p, simple_amounts=False, simple_pct=True)
+             else:
+                 st.session_state.quiz_data = generate_question_data(is_advanced=True, force_pattern=force_p)
+        
+        q = st.session_state.quiz_data
+        correct = q['correct']
+        options = [correct]
+        
+        if advanced:
+            multipliers = [0.85, 0.90, 0.95, 1.05, 1.10, 1.15]
+            selected_mults = random.sample(multipliers, 3)
+            for m in selected_mults:
+                options.append(correct * m)
+        else:
+            if q['pattern'] == 2:
+                options.extend([correct * 0.8, correct * 1.2, correct * 1.5])
+            else:
+                options.append(correct * 10)
+                options.append(correct / 10)
+                options.append(random.choice([correct * 100, correct / 100, correct * 2]))
+
+        random.shuffle(options)
+        q['options'] = options
+
+    q = st.session_state.quiz_data
+    
+    st.markdown(f"""
+    <div class="css-card">
+        <h3 style="margin-top:0; color: #38BDF8;">Question</h3>
+        <p style="font-size: 18px; line-height: 1.6; color: #F1F5F9;">{q['q_text']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if not st.session_state.quiz_answered:
+        show_timer()
+
+    if not st.session_state.quiz_answered:
+        col1, col2 = st.columns(2)
+        for i, opt in enumerate(q['options']):
+            btn_label = format_japanese_answer(opt)
+            target_col = col1 if i % 2 == 0 else col2
+            
+            if target_col.button(f"{btn_label}", key=f"q_{st.session_state.current_q_idx}_opt_{i}", use_container_width=True):
+                elapsed = time.time() - st.session_state.current_start_time
+                st.session_state.total_duration += elapsed
+                st.session_state.current_q_time = elapsed
+                
+                st.session_state.quiz_answered = True
+                st.session_state.user_choice = opt
+                st.rerun()
+    else:
+        user_val = st.session_state.user_choice
+        correct_val = q['correct']
+        v1 = q['raw_val1']
+        v2 = q['raw_val2']
+        pct = q['raw_pct']
+        pat = q['pattern']
+        u1 = q['unit1']
+        u2 = q['unit2']
+        
+        # 解説用（アラビア数字）
+        calc_str_arabic = ""
+        if pat == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
+        elif pat == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
+        elif pat == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
+        elif pat == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
+
+        # 履歴用（漢数字+単位）
+        f_v1 = format_japanese_answer(v1) + u1
+        f_ans = format_japanese_answer(correct_val) + "円"
+        calc_str_kanji = ""
+        if pat == 1: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+        elif pat == 2: 
+            calc_str_kanji = f"{f_v1} × {pct}% ＝ {f_ans}"
+        elif pat == 3: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} × {pct}% ＝ {f_ans}"
+        elif pat == 4: 
+            f_v2 = f"{v2}{u2}"
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+
+        ratio = user_val / correct_val if correct_val != 0 else 0
+        is_correct = (0.99 <= ratio <= 1.01)
+        
+        if len(st.session_state.history) < st.session_state.current_q_idx:
+            st.session_state.history.append({
+                "result_label": "⭕" if is_correct else "❌",
+                "points": 1 if is_correct else 0,
+                "formula_kanji": calc_str_kanji,
+                "time": st.session_state.current_q_time
+            })
+        
+        if is_correct: 
+            st.success("🎉 正解！")
+        else:
+            st.error(f"❌ 不正解... 正解は 「{format_japanese_answer(correct_val)}」")
+        
+        st.info(f"🧮 計算イメージ: {calc_str_arabic}")
+
+        if st.button("次の問題へ", type="primary"):
+            if is_correct: st.session_state.score += 1
+            next_question()
+            st.rerun()
+
+# ==========================================
+# メイン
+# ==========================================
+def main():
+    st.set_page_config(page_title="ビジネス暗算道場", page_icon="💼")
+    apply_custom_design()
+    
+    if 'page' not in st.session_state:
+        st.session_state.page = "home"
+    if 'current_q_idx' not in st.session_state:
+        init_game_state()
+
+    if st.session_state.page == "home":
+        st.markdown("<h1 style='text-align: center; color: #38BDF8; font-size: 3.5rem; text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);'>💼 ビジネス暗算道場</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #94A3B8;'>Advance your mental math skills with professional tools.</p>", unsafe_allow_html=True)
+        st.write("")
+        st.write("")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.success("🧩 お気軽モード（4択式）")
+            if st.button("基礎編", key="quiz_basic_btn", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "quiz"
+                st.rerun()
+            if st.button("上級編", key="quiz_adv_btn", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "quiz_advanced"
+                st.rerun()
+            st.caption("4択で瞬時に判断する実戦モード。")
+
+        with col2:
+            st.info("📊 チャレンジモード（入力式）")
+            if st.button("基礎編", key="train_basic_btn", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "training"
+                st.rerun()
+            if st.button("上級編", key="train_adv_btn", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "training_advanced"
+                st.rerun()
+            st.caption("誤差2%以内で満点。基礎は丸い数字、上級は実戦的。")
+
+        # ランキング表示エリア
+        st.write("")
+        st.markdown("---")
+        st.subheader("🏆 最新ランキング")
+        # デフォルトで全モードのランキングを表示（必要に応じてタブ分けなど可能）
+        display_ranking()
+
+        st.write("")
+        st.markdown("---")
+        st.subheader("📚 おすすめの学習資料")
+        bk1, bk2 = st.columns(2)
+        with bk1:
+            st.markdown("Example: **外資系コンサルのフェルミ推定** ([Link](https://amazon.co.jp))")
+        with bk2:
+            st.markdown("Example: **決算書の読み方** ([Link](https://amazon.co.jp))")
+
+    elif st.session_state.page == "training":
+        mode_training(advanced=False)
+    elif st.session_state.page == "training_advanced":
+        mode_training(advanced=True)
+    elif st.session_state.page == "quiz":
+        mode_quiz(advanced=False)
+    elif st.session_state.page == "quiz_advanced":
+        mode_quiz(advanced=True)
+
+if __name__ == "__main__":
+    main()
