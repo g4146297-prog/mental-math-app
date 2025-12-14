@@ -10,7 +10,6 @@ from datetime import datetime
 # ==========================================
 RANKING_FILE = "ranking.csv"
 MAX_LIMIT = 10**13
-MIN_LIMIT = 100
 TOTAL_QUESTIONS = 10
 
 # ==========================================
@@ -91,6 +90,22 @@ def apply_custom_design():
             justify-content: space-between;
             align-items: center;
         }
+        /* タブのスタイル調整 */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 10px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: 50px;
+            white-space: pre-wrap;
+            background-color: #1E293B;
+            border-radius: 4px 4px 0 0;
+            color: #94A3B8;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #38BDF8 !important;
+            color: #0F172A !important;
+            font-weight: bold;
+        }
     </style>
     """
     st.markdown(custom_css, unsafe_allow_html=True)
@@ -125,7 +140,7 @@ def display_ranking(filter_mode=None):
     if filter_mode:
         df = df[df["mode"] == filter_mode]
         if df.empty:
-            st.info(f"「{filter_mode}」のランキングはまだありません。")
+            st.info(f"ランキングデータはまだありません。")
             return
 
     # ソート（スコア降順、タイム昇順）
@@ -243,7 +258,6 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
                 pct = random.randint(min_p, max_p)
                 if pct not in excluded_pct: break
     
-    # 上級編はカンマ区切り、基礎編は単位付き
     if simple_amounts:
         label1 = format_number_with_unit_label(val1)
     else:
@@ -386,9 +400,7 @@ def show_result_screen(mode_name):
     st.write("### 📝 結果詳細")
     for h in st.session_state.history:
         label = h['result_label']
-        # 文字色: 正解/高得点は黄色、不正解/低得点は赤やグレー
         color = '#FACC15' if ('⭕' in label or '点' in label and int(label.replace('点',''))>=8) else '#EF4444'
-        
         st.markdown(f"""
         <div class="history-row">
             <span style="color:{color}; font-weight:bold; margin-right:10px; min-width:50px;">
@@ -718,12 +730,25 @@ def main():
                 st.rerun()
             st.caption("誤差2%以内で満点。基礎は丸い数字、上級は実戦的。")
 
-        # ランキング表示エリア
+        # ランキング表示エリア (タブ分け)
         st.write("")
         st.markdown("---")
         st.subheader("🏆 最新ランキング")
-        # デフォルトで全モードのランキングを表示（必要に応じてタブ分けなど可能）
-        display_ranking()
+        
+        tab1, tab2, tab3, tab4 = st.tabs(["お気軽(基礎)", "お気軽(上級)", "チャレンジ(基礎)", "チャレンジ(上級)"])
+        
+        with tab1:
+            st.caption("お気軽モード（基礎編）")
+            display_ranking("お気軽(基礎)")
+        with tab2:
+            st.caption("お気軽モード（上級編）")
+            display_ranking("お気軽(上級)")
+        with tab3:
+            st.caption("チャレンジモード（基礎編）")
+            display_ranking("チャレンジ(基礎)")
+        with tab4:
+            st.caption("チャレンジモード（上級編）")
+            display_ranking("チャレンジ(上級)")
 
         st.write("")
         st.markdown("---")
