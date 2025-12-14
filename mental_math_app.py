@@ -115,7 +115,7 @@ def format_japanese_answer(num):
     return "".join(result) if result else "0"
 
 def format_number_with_unit_label(value):
-    """基礎編用: 単位付きで丸めて表示（例: 1.5万）"""
+    """問題文表示用: 単位付き（例: 1.5万）"""
     if value >= 10**8:
         if value % 10**8 == 0: return f"{value // 10**8:,}億"
         else: return f"{value / 10**8:.1f}億".replace(".0", "")
@@ -128,7 +128,6 @@ def format_number_with_unit_label(value):
 def get_random_val(min_val, max_val, simple=False):
     val = random.randint(min_val, max_val)
     if simple:
-        # 基礎編: キリの良い数字にする
         digits = len(str(val))
         if digits > 1:
             bases = [10, 20, 30, 40, 50, 60, 70, 80, 90, 15, 25, 12, 18]
@@ -153,13 +152,13 @@ SCENARIOS = [
     { "pattern": 1, "template": "契約単価 <b>{label1}円</b> のサブスク会員が <b>{label2}人</b> います。<br>毎月の売上は？", "range1": (500, 10000), "range2": (1000, 1000000), "unit1":"円", "unit2":"人" },
     # パターン2: A * r
     { "pattern": 2, "template": "売上高 <b>{label1}円</b> に対して、営業利益率は <b>{pct}%</b> です。<br>営業利益は？", "range1": (100000000, 1000000000000), "pct_range": (1, 30), "unit1":"円" },
-    { "pattern": 2, "template": "市場規模 <b>{label1}円</b> の業界で、シェア <b>{pct}%</b> を獲得しました。<br>自社の売上は？", "range1": (1000000000, 1000000000000), "pct_range": (1, 50), "unit1":"円" },
+    { "pattern": 2, "template": "市場規模 <b>{label1}円</b> の業界で、シェア <b>{pct}%</b> を獲得しました。<br>自社の売上は？", "range1": (1000000000, 1000000000000), "pct_range": (1, 60), "unit1":"円" }, # 50%を避けるため範囲拡大
     { "pattern": 2, "template": "予算 <b>{label1}円</b> のうち、すでに <b>{pct}%</b> を消化しました。<br>消化した金額は？", "range1": (1000000, 1000000000), "pct_range": (5, 95), "unit1":"円" },
     { "pattern": 2, "template": "投資額 <b>{label1}円</b> に対して、リターン（利回り）が <b>{pct}%</b> ありました。<br>利益額は？", "range1": (1000000, 10000000000), "pct_range": (3, 20), "unit1":"円" },
     # パターン3: A * B * r
     { "pattern": 3, "template": "単価 <b>{label1}円</b> の商品を <b>{label2}個</b> 販売し、利益率は <b>{pct}%</b> でした。<br>利益額は？", "range1": (100, 20000), "range2": (100, 50000), "pct_range": (5, 40), "unit1":"円", "unit2":"個" },
     { "pattern": 3, "template": "客単価 <b>{label1}円</b> で <b>{label2}人</b> が来店し、原価率は <b>{pct}%</b> です。<br>原価の総額は？", "range1": (500, 10000), "range2": (100, 50000), "pct_range": (20, 80), "unit1":"円", "unit2":"人" },
-    { "pattern": 3, "template": "案件単価 <b>{label1}円</b> の案件が <b>{label2}件</b> あり、成約率は <b>{pct}%</b> でした。<br>成約による売上合計は？", "range1": (100000, 5000000), "range2": (10, 500), "pct_range": (5, 50), "unit1":"円", "unit2":"件" },
+    { "pattern": 3, "template": "案件単価 <b>{label1}円</b> の案件が <b>{label2}件</b> あり、成約率は <b>{pct}%</b> でした。<br>成約による売上合計は？", "range1": (100000, 5000000), "range2": (10, 500), "pct_range": (5, 60), "unit1":"円", "unit2":"件" },
     # パターン4: A * B(年)
     { "pattern": 4, "template": "子会社株式の減損テスト。将来CF <b>{label1}円</b> が <b>{label2}</b> 続くと仮定します。<br>割引前のCF総額は？", "range1": (10000000, 5000000000), "range2": (3, 15), "suffix2": "年", "unit1":"円", "unit2":"年間" },
     { "pattern": 4, "template": "投資案件の評価。年間 <b>{label1}円</b> のリターンが <b>{label2}</b> 継続する見込みです。<br>期間累計のリターンは？", "range1": (1000000, 1000000000), "range2": (3, 20), "suffix2": "年", "unit1":"円", "unit2":"年間" },
@@ -167,8 +166,6 @@ SCENARIOS = [
 ]
 
 def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts=None, simple_pct=None):
-    # simple_amounts: Trueなら「丸めた数字」を表示 (基礎編)
-    # simple_amounts: Falseなら「正確な数字(カンマ区切り)」を表示 (上級編)
     if simple_amounts is None: simple_amounts = not is_advanced
     if simple_pct is None: simple_pct = not is_advanced
 
@@ -189,13 +186,28 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
         
     if 'pct_range' in scenario:
         min_p, max_p = scenario['pct_range']
+        
+        # --- ★修正点: 10%と50%を出さないように制御 ---
+        excluded_pct = [10, 50]
+        
         if simple_pct:
-            pct = random.choice(list(range(min_p, max_p+1, 5)))
-            if pct == 0: pct = 5
+            # 5%刻み (ただし 0, 10, 50 は除外)
+            candidates_pct = list(range(min_p, max_p+1, 5))
+            candidates_pct = [p for p in candidates_pct if p not in excluded_pct and p != 0]
+            
+            # 候補がなくなってしまった場合の安全策 (例: 範囲が狭すぎる場合など)
+            if not candidates_pct:
+                pct = 5 # デフォルト
+            else:
+                pct = random.choice(candidates_pct)
         else:
-            pct = random.randint(min_p, max_p)
+            # 1%刻み (10, 50は除外)
+            while True:
+                pct = random.randint(min_p, max_p)
+                if pct not in excluded_pct:
+                    break
     
-    # ★修正点: 上級編(simple_amounts=False)の場合は、丸めずにカンマ区切りの正確な数値を表示
+    # 基礎編(simple_amounts=False以外)の場合は単位付き表示、上級編はカンマ区切り
     if simple_amounts:
         label1 = format_number_with_unit_label(val1)
     else:
@@ -413,7 +425,6 @@ def mode_training(advanced=False):
         elif pattern_used == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
         elif pattern_used == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
 
-        # 履歴用（漢数字）
         f_v1 = format_japanese_answer(v1) + u1
         f_ans = format_japanese_answer(correct_val) + "円"
         calc_str_kanji = ""
