@@ -1,505 +1,854 @@
 import streamlit as st
+import random
+import time
 import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-import google.generativeai as genai
-import datetime
+import os
+from datetime import datetime
 
-# --- ページ設定 ---
-st.set_page_config(
-    page_title="将来家計シミュレーション (ポートフォリオ分析版)",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# ==========================================
+# 定数・設定
+# ==========================================
+RANKING_FILE = "ranking.csv"
+MAX_LIMIT = 10**14 # フラッシュカード用に少し上限緩和(100兆まで許容)
+TOTAL_QUESTIONS = 10
 
-# --- パスワード認証機能 ---
-def check_password():
-    if "password" not in st.secrets:
-        return True
-    def password_entered():
-        if st.session_state["password"] == st.secrets["password"]:
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-        else:
-            st.session_state["password_correct"] = False
-    if "password_correct" not in st.session_state:
-        st.text_input("パスワードを入力してください", type="password", on_change=password_entered, key="password")
-        return False
-    elif not st.session_state["password_correct"]:
-        st.text_input("パスワードを入力してください", type="password", on_change=password_entered, key="password")
-        st.error("パスワードが間違っています")
-        return False
-    else:
-        return True
+# ==========================================
+# デザイン設定 (CSS)
+# ==========================================
+def apply_custom_design():
+    custom_css = """
+    <style>
+        .stApp {
+            background-color: #0F172A;
+            color: #F8FAFC;
+        }
+        h1, h2, h3 {
+            color: #38BDF8;
+            font-family: "Roboto", "Helvetica Neue", sans-serif;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+        /* プライマリーボタン */
+        div.stButton > button:first-child {
+            background: linear-gradient(135deg, #2563EB 0%, #1E3A8A 100%);
+            color: white;
+            border-radius: 4px;
+            border: none;
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4);
+            font-weight: bold;
+            letter-spacing: 0.05em;
+            transition: all 0.2s ease-in-out;
+        }
+        div.stButton > button:first-child:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(37, 99, 235, 0.6);
+        }
+        /* セカンダリーボタン（透明） */
+        div.stButton > button:nth-child(2) {
+            background-color: transparent;
+            color: #38BDF8;
+            border: 1px solid #38BDF8;
+            border-radius: 4px;
+        }
+        div.stButton > button:nth-child(2):hover {
+            background-color: rgba(56, 189, 248, 0.1);
+        }
+        [data-testid="stMetricValue"] {
+            color: #FACC15;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(250, 204, 21, 0.3);
+        }
+        [data-testid="stMetricLabel"] {
+            color: #94A3B8;
+        }
+        .css-card {
+            background-color: #1E293B;
+            border-left: 4px solid #FACC15;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        .flashcard-q {
+            font-size: 42px; 
+            font-weight: bold; 
+            color: #F8FAFC; 
+            text-align: center;
+            font-family: 'Consolas', 'Monaco', monospace;
+            padding: 40px 0;
+        }
+        .flashcard-a {
+            font-size: 42px; 
+            font-weight: bold; 
+            color: #FACC15; 
+            text-align: center;
+            padding: 20px 0;
+            border-top: 1px dashed #334155;
+        }
+        .stAlert {
+            background-color: #1E293B;
+            border: 1px solid #334155;
+            color: #E2E8F0;
+        }
+        hr {
+            border-color: #334155;
+        }
+        /* 履歴テーブル用のスタイル */
+        .history-row {
+            background-color: #1E293B;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            border-left: 3px solid #38BDF8;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        /* タブのスタイル調整 */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 10px;
+        }
+        .stTabs [data-baseweb="tab"] {
+            height: 50px;
+            white-space: pre-wrap;
+            background-color: #1E293B;
+            border-radius: 4px 4px 0 0;
+            color: #94A3B8;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #38BDF8 !important;
+            color: #0F172A !important;
+            font-weight: bold;
+        }
+    </style>
+    """
+    st.markdown(custom_css, unsafe_allow_html=True)
 
-if not check_password():
-    st.stop()
+# ==========================================
+# ランキング機能
+# ==========================================
+def load_ranking():
+    if not os.path.exists(RANKING_FILE):
+        return pd.DataFrame(columns=["timestamp", "nickname", "mode", "score", "duration"])
+    return pd.read_csv(RANKING_FILE)
 
-# --- 定数データ ---
-EDUCATION_COSTS = {
-    '【A】公立中心(塾しっかり)': [10, 10, 10, 25, 25, 25, 35, 35, 35, 40, 45, 50, 60, 60, 80, 60, 70, 90, 90, 55, 55, 55, 0],
-    '【B】中高公立・私大文系': [10, 10, 10, 25, 25, 25, 35, 35, 35, 40, 45, 50, 60, 60, 80, 60, 70, 90, 135, 105, 105, 105, 0],
-    '【C】中高公立・私大理系': [10, 10, 10, 25, 25, 25, 35, 35, 35, 40, 45, 50, 60, 60, 80, 60, 70, 90, 170, 150, 150, 150, 0],
-    '【D】高校から私立(文系大)': [10, 10, 10, 25, 25, 25, 35, 35, 35, 40, 45, 50, 60, 60, 80, 100, 100, 110, 135, 105, 105, 105, 0],
-    '【E】高校から私立(理系大)': [10, 10, 10, 25, 25, 25, 35, 35, 35, 40, 45, 50, 60, 60, 80, 100, 100, 110, 170, 150, 150, 150, 0],
-    '【F】中学受験(私立中高一貫)・文系大': [10, 10, 10, 25, 25, 25, 35, 35, 35, 80, 100, 140, 145, 145, 150, 110, 110, 120, 135, 105, 105, 105, 0],
-    '【G】中学受験(私立中高一貫)・理系大': [10, 10, 10, 25, 25, 25, 35, 35, 35, 80, 100, 140, 145, 145, 150, 110, 110, 120, 170, 150, 150, 150, 0],
-    '【H】小学校から私立(文系大)': [10, 10, 10, 25, 25, 25, 160, 160, 160, 160, 170, 180, 145, 145, 150, 110, 110, 120, 135, 105, 105, 105, 0],
-    '【I】小学校から私立(理系大)': [10, 10, 10, 25, 25, 25, 160, 160, 160, 160, 170, 180, 145, 145, 150, 110, 110, 120, 170, 150, 150, 150, 0],
-}
+def save_ranking(nickname, mode, score, duration):
+    df = load_ranking()
+    new_data = pd.DataFrame({
+        "timestamp": [datetime.now().strftime("%Y-%m-%d %H:%M")],
+        "nickname": [nickname],
+        "mode": [mode],
+        "score": [score],
+        "duration": [duration]
+    })
+    df = pd.concat([df, new_data], ignore_index=True)
+    df.to_csv(RANKING_FILE, index=False)
 
-REARING_COSTS = {
-    '【A】標準プラン': [80, 80, 80, 90, 90, 90, 100, 100, 100, 110, 110, 120, 130, 130, 130, 140, 140, 140, 100, 100, 100, 100, 0],
-    '【B】ゆとりプラン': [100, 100, 100, 110, 110, 110, 120, 120, 120, 130, 130, 140, 150, 150, 150, 160, 160, 160, 150, 150, 150, 150, 0],
-}
+def display_ranking(filter_mode=None):
+    df = load_ranking()
+    if df.empty:
+        st.info("まだランキングデータがありません。")
+        return
 
-INCOME_PRESETS = {
-    '【A】保守的': {'base': 800, 'growth': 0.5},
-    '【B】標準': {'base': 800, 'growth': 1.5},
-    '【C】積極': {'base': 800, 'growth': 3.0},
-}
+    if filter_mode:
+        df = df[df["mode"] == filter_mode]
+        if df.empty:
+            st.info(f"ランキングデータはまだありません。")
+            return
 
-LIVING_PRESETS = {
-    '【A】節約 (月30万)': 360,
-    '【B】標準 (月38万)': 456, 
-    '【C】ゆとり (月48万)': 576,
-}
-
-INFLATION_PRESETS = {'0% (ゼロ)': 0.00, '1% (低め)': 0.01, '2% (標準)': 0.02, '3% (高め)': 0.03}
-MORTGAGE_RATE_SCENARIOS = {'固定 (変動なし)': 'fixed', '安定 (±微減)': 'stable', '緩やか上昇 (+0.05%/年)': 'rising', '急上昇 (+0.2%/年)': 'sharp_rising'}
-
-# 為替シナリオ定義
-FX_SCENARIOS = {
-    '📈 円安トレンド (米ドル価値 +1.0%/年)': 0.01,
-    '➡️ 為替横ばい (±0%/年)': 0.00,
-    '📉 緩やかな円高 (米ドル価値 -1.0%/年)': -0.01,
-    '⏬ 急速な円高 (米ドル価値 -2.5%/年)': -0.025,
-}
-
-# --- 関数定義 ---
-def get_rate_fluctuation(scenario, current_base_rate):
-    if scenario == 'fixed': return current_base_rate
-    elif scenario == 'stable': return current_base_rate + (np.random.random() - 0.45) * 0.05
-    elif scenario == 'rising': return current_base_rate + 0.05
-    elif scenario == 'sharp_rising': return current_base_rate + 0.20
-    return current_base_rate
-
-def get_cost(age, cost_list):
-    if 0 <= age < len(cost_list): return cost_list[age]
-    return 0
-
-def get_boarding_cost(age, is_boarding, cost_per_year):
-    if is_boarding and (18 <= age <= 21): return cost_per_year
-    return 0
-
-# --- サイドバー設定 ---
-st.sidebar.title("🛠️ 条件設定")
-
-# 1. お子様・教育
-st.sidebar.header("👶 1. お子様・教育プラン")
-col1, col2 = st.sidebar.columns(2)
-with col1:
-    c1_year = st.number_input("第1子 誕生年", value=2025, step=1)
-with col2:
-    c1_month = st.number_input("第1子 誕生月", value=2, min_value=1, max_value=12)
-c1_edu = st.sidebar.selectbox("第1子 教育コース", list(EDUCATION_COSTS.keys()), index=8) # 【I】小学校から私立
-c1_boarding = st.sidebar.checkbox("第1子 大学は下宿(仕送り)", value=False)
-
-has_child2 = st.sidebar.checkbox("第2子を含める", value=False)
-if has_child2:
-    col3, col4 = st.sidebar.columns(2)
-    with col3:
-        c2_year = st.number_input("第2子 誕生年", value=2028, step=1)
-    with col4:
-        c2_month = st.number_input("第2子 誕生月", value=4, min_value=1, max_value=12)
-    c2_edu = st.sidebar.selectbox("第2子 教育コース", list(EDUCATION_COSTS.keys()), index=0)
-    c2_boarding = st.sidebar.checkbox("第2子 大学は下宿(仕送り)", value=False)
-else:
-    c2_year, c2_month = None, None
-    c2_edu = None
-    c2_boarding = False
-
-if c1_boarding or c2_boarding:
-    boarding_cost_yearly = st.sidebar.number_input("年間仕送り額 (家賃+生活費)", value=150, step=10)
-else:
-    boarding_cost_yearly = 0
-
-# 2. 収入・生活費・定年
-st.sidebar.header("👛 2. 収入・定年設定")
-head_age = st.sidebar.number_input("世帯主 現在年齢", value=38, step=1) # 38歳
-income_preset_key = st.sidebar.selectbox("世帯主収入シナリオ", list(INCOME_PRESETS.keys()), index=1)
-income_preset = INCOME_PRESETS[income_preset_key]
-head_income_base = st.sidebar.number_input("世帯主 現在年収 (万円)", value=1050, step=10) # 1050万円
-head_income_growth = st.sidebar.number_input("世帯主 昇給率 (%/年)", value=income_preset['growth'], step=0.1)
-
-st.sidebar.markdown("##### 👴 定年・再雇用")
-retirement_age = st.sidebar.number_input("定年年齢", value=60, step=1)
-reemploy_ratio = st.sidebar.slider("再雇用時の年収掛目(%)", 30, 100, 60)
-retire_completely_age = st.sidebar.number_input("完全リタイア年齢", value=65, step=1)
-
-st.sidebar.markdown("##### 💴 年金")
-pension_start_age = st.sidebar.number_input("年金受給開始年齢", value=65, step=1)
-pension_amount = st.sidebar.number_input("世帯の年金受給額(年額)", value=240, step=10)
-
-st.sidebar.markdown("---")
-partner_income = st.sidebar.number_input("パートナー現在年収 (万円)", value=0, step=10)
-
-st.sidebar.markdown("---")
-living_preset_key = st.sidebar.selectbox("生活費 (住居費別)", list(LIVING_PRESETS.keys()), index=2) # ゆとり
-living_cost_base = st.sidebar.number_input("年間生活費 (万円)", value=LIVING_PRESETS[living_preset_key], step=10)
-fixed_cost_housing = st.sidebar.number_input("固定資産税・維持費 (年額)", value=19.2, step=0.1)
-inflation_key = st.sidebar.selectbox("物価上昇率", list(INFLATION_PRESETS.keys()), index=2)
-inflation_rate = INFLATION_PRESETS[inflation_key]
-
-# 3. 資産・運用
-st.sidebar.header("💰 3. 資産・ポートフォリオ")
-initial_cash = st.sidebar.number_input("現在の貯金 (万円)", value=330, step=10) # 330万円
-safety_net_val = st.sidebar.number_input("生活防衛資金 (万円)", value=300, step=10)
-st.sidebar.markdown("---")
-initial_invest_yen = st.sidebar.number_input("国内資産 (為替リスクなし)", value=360, step=10) # 360万円
-yield_yen = st.sidebar.number_input("国内資産 年利回り (%)", value=0.5, step=0.1)
-
-st.sidebar.markdown("##### 🌍 外国資産 (為替リスクあり)")
-st.caption("iDeCoもここに含んで計算します")
-fx_scenario_key = st.sidebar.selectbox("為替リスクシナリオ", list(FX_SCENARIOS.keys()))
-fx_change_rate = FX_SCENARIOS[fx_scenario_key]
-
-col_f1, col_f2 = st.sidebar.columns(2)
-with col_f1:
-    initial_foreign_cash = st.sidebar.number_input("外貨現預金 (万円)", value=58, step=10)
-    yield_foreign_cash = st.sidebar.number_input("外貨預金 利回り(%)", value=2.0, step=0.1)
+    df = df.sort_values(by=["score", "duration"], ascending=[False, True]).reset_index(drop=True)
     
-    initial_foreign_bond = st.sidebar.number_input("外国債券 (万円)", value=406, step=10)
-    yield_foreign_bond = st.sidebar.number_input("外国債券 利回り(%)", value=3.0, step=0.1)
+    display_df = df[["nickname", "score", "duration", "timestamp"]].copy()
+    display_df["rank"] = display_df.index + 1
+    display_df["duration"] = display_df["duration"].apply(lambda x: f"{int(x//60)}分{int(x%60)}秒")
+    display_df.columns = ["ニックネーム", "スコア/正解数", "タイム", "日付", "順位"]
+    display_df = display_df[["順位", "ニックネーム", "スコア/正解数", "タイム", "日付"]]
 
-with col_f2:
-    initial_foreign_stock = st.sidebar.number_input("外国投信・株 (万円)", value=1683, step=10)
-    yield_foreign_stock = st.sidebar.number_input("外国株 利回り(%)", value=5.0, step=0.1)
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-    initial_ideco = st.sidebar.number_input("うちiDeCo残高 (万円)", value=190, step=10)
-    ideco_monthly = st.sidebar.number_input("iDeCo 毎月掛金 (万円)", value=3.0, step=0.1)
-    # iDeCoは外国株式相当として扱う
-    
-st.sidebar.markdown("---")
-invest_surplus = st.sidebar.checkbox("生活防衛資金を超える黒字を投資に回す", value=True)
-if invest_surplus:
-    foreign_allocation = st.sidebar.slider("黒字分の外国株式(リスク資産)への配分(%)", 0, 100, 100)
-else:
-    foreign_allocation = 0
-
-# 4. 住宅ローン (一番下へ移動)
-st.sidebar.header("🏠 4. 住宅ローン")
-mortgage_principal = st.sidebar.number_input("借入金額 (万円)", value=6460, step=100)
-col_m1, col_m2 = st.sidebar.columns(2)
-with col_m1:
-    mortgage_start_year = st.number_input("返済開始年", value=2024)
-with col_m2:
-    mortgage_end_year = st.number_input("完済予定年", value=2059)
-mortgage_base_rate = st.sidebar.number_input("基準金利 (%)", value=2.841, step=0.001, format="%.3f")
-mortgage_reduction_rate = st.sidebar.number_input("引下幅 (%)", value=2.057, step=0.001, format="%.3f")
-mortgage_rate_scenario = MORTGAGE_RATE_SCENARIOS[st.sidebar.selectbox("金利変動シナリオ", list(MORTGAGE_RATE_SCENARIOS.keys()))]
-
-
-# --- シミュレーション実行 ---
-start_year = 2025
-last_child_grad_year = c1_year + 23
-if has_child2: last_child_grad_year = max(last_child_grad_year, c2_year + 23)
-end_year = max(start_year + 45, last_child_grad_year) 
-years = list(range(start_year, end_year + 1))
-
-df = pd.DataFrame(index=years)
-df['西暦'] = df.index
-df['経過年数'] = df['西暦'] - start_year
-df['世帯主年齢'] = head_age + df['経過年数']
-df['第1子年齢'] = df['西暦'] - c1_year
-df['第2子年齢'] = (df['西暦'] - c2_year) if has_child2 else np.nan
-
-# 収入計算
-head_incomes = []
-pension_incomes = []
-peak_income = 0 
-for i, year in enumerate(years):
-    age = df['世帯主年齢'].iloc[i]
-    if age < retirement_age:
-        inc = head_income_base * (1 + head_income_growth / 100) ** i
-        head_incomes.append(inc)
-        peak_income = inc 
-    elif age < retire_completely_age:
-        inc = peak_income * (reemploy_ratio / 100)
-        head_incomes.append(inc)
-    else:
-        head_incomes.append(0)
-    if age >= pension_start_age:
-        pension_incomes.append(pension_amount)
-    else:
-        pension_incomes.append(0)
-df['世帯主労働収入'] = head_incomes
-df['年金収入'] = pension_incomes
-df['世帯収入'] = df['世帯主労働収入'] + partner_income + df['年金収入']
-
-# 支出
-df['教育費'] = df['第1子年齢'].apply(lambda x: get_cost(x, EDUCATION_COSTS[c1_edu]))
-if has_child2: df['教育費'] += df['第2子年齢'].apply(lambda x: get_cost(x, EDUCATION_COSTS[c2_edu]))
-df['養育費'] = df['第1子年齢'].apply(lambda x: get_cost(x, REARING_COSTS['【A】標準プラン']))
-if has_child2: df['養育費'] += df['第2子年齢'].apply(lambda x: get_cost(x, REARING_COSTS['【A】標準プラン']))
-df['仕送り'] = df['第1子年齢'].apply(lambda x: get_boarding_cost(x, c1_boarding, boarding_cost_yearly))
-if has_child2: df['仕送り'] += df['第2子年齢'].apply(lambda x: get_boarding_cost(x, c2_boarding, boarding_cost_yearly))
-df['生活費(インフレ込)'] = living_cost_base * (1 + inflation_rate) ** df['経過年数'] + fixed_cost_housing
-df['支出計(ローン除)'] = df['教育費'] + df['養育費'] + df['仕送り'] + df['生活費(インフレ込)']
-
-# 資産計算
-current_cash = initial_cash * 10000
-current_yen_asset = initial_invest_yen * 10000
-# 外国資産
-cur_f_cash = initial_foreign_cash * 10000
-cur_f_bond = initial_foreign_bond * 10000
-cur_f_stock = initial_foreign_stock * 10000
-cur_ideco = initial_ideco * 10000
-
-current_loan_balance = mortgage_principal * 10000
-current_base_rate = mortgage_base_rate
-safety_net_amount = safety_net_val * 10000
-
-# ローン初期計算
-months_before = max(0, (start_year - mortgage_start_year) * 12 + 3)
-monthly_r_init = (mortgage_base_rate - mortgage_reduction_rate) / 100 / 12
-if monthly_r_init < 0: monthly_r_init = 0
-total_months = (mortgage_end_year - mortgage_start_year) * 12
-for _ in range(months_before):
-    if current_loan_balance > 0:
-        interest = current_loan_balance * monthly_r_init
-        if total_months > 0:
-            if monthly_r_init > 0:
-                payment = (current_loan_balance * monthly_r_init * (1+monthly_r_init)**total_months) / ((1+monthly_r_init)**total_months - 1)
-            else:
-                payment = current_loan_balance / total_months
-            current_loan_balance -= (payment - interest)
-            total_months -= 1
-
-cash_hist, yen_hist, f_cash_hist, f_bond_hist, f_stock_hist, ideco_hist = [], [], [], [], [], []
-loan_hist, payment_hist, balance_hist = [], [], []
-bankrupt_year = None
-min_assets_val = float('inf')
-min_assets_year = start_year
-
-for i, year in enumerate(years):
-    # iDeCo積立 (60歳まで)
-    age = df['世帯主年齢'].iloc[i]
-    ideco_add = 0
-    if age < 60:
-        ideco_add = ideco_monthly * 10000 * 12
-    # iDeCo運用: 外国株並みの利回りと仮定 + 為替変動
-    ideco_growth_rate = (1 + yield_foreign_stock / 100) * (1 + fx_change_rate) - 1
-    ideco_gain = (cur_ideco + ideco_add / 2) * ideco_growth_rate
-    cur_ideco += ideco_add + ideco_gain
-    
-    # 住宅ローン
-    annual_payment = 0
-    if i > 0: current_base_rate = get_rate_fluctuation(mortgage_rate_scenario, current_base_rate)
-    applied_rate = max(0, current_base_rate - mortgage_reduction_rate)
-    monthly_r = applied_rate / 100 / 12
-    for _ in range(12):
-        if current_loan_balance <= 0: break
-        months_left = (mortgage_end_year - year) * 12
-        if months_left <= 0: months_left = 1
-        if monthly_r > 0:
-            p = (current_loan_balance * monthly_r * (1+monthly_r)**months_left) / ((1+monthly_r)**months_left - 1)
-        else:
-            p = current_loan_balance / months_left
-        interest = current_loan_balance * monthly_r
-        current_loan_balance -= (p - interest)
-        annual_payment += p
-    
-    # キャッシュフロー
-    income = df['世帯収入'].iloc[i] * 10000
-    spending = df['支出計(ローン除)'].iloc[i] * 10000 + annual_payment
-    cash_flow = income - spending - ideco_add
-    
-    # --- 資産運用 (成長) ---
-    current_yen_asset *= (1 + yield_yen / 100)
-    
-    # 外国資産成長 (利回り + 為替)
-    f_cash_growth = (1 + yield_foreign_cash / 100) * (1 + fx_change_rate) - 1
-    f_bond_growth = (1 + yield_foreign_bond / 100) * (1 + fx_change_rate) - 1
-    f_stock_growth = (1 + yield_foreign_stock / 100) * (1 + fx_change_rate) - 1
-    
-    cur_f_cash *= (1 + f_cash_growth)
-    cur_f_bond *= (1 + f_bond_growth)
-    cur_f_stock *= (1 + f_stock_growth)
-    
-    current_cash += cash_flow
-    
-    # --- 生活防衛資金ロジック ---
-    # 取り崩し順序: 外国現預金 -> 外国債券 -> 外国株 -> 国内資産 (リスク低い順に切り崩すか、流動性重視か。ここでは分散して取り崩すロジックは複雑なため、リスク資産(外国株)から取り崩す設定にするか、あるいは「投資全体」として扱うか。
-    # ここではシンプルに「外国株(投信)」を調整弁にする (NISA想定)
-    
-    if current_cash < safety_net_amount:
-        deficit = safety_net_amount - current_cash
-        # まず外国株から
-        if cur_f_stock >= deficit:
-            cur_f_stock -= deficit
-            current_cash += deficit
-        else:
-            # 外国株で足りなければ外国債券
-            deficit -= cur_f_stock
-            current_cash += cur_f_stock
-            cur_f_stock = 0
-            if cur_f_bond >= deficit:
-                cur_f_bond -= deficit
-                current_cash += deficit
-            else:
-                # 債券でも足りなければ国内資産
-                deficit -= cur_f_bond
-                current_cash += cur_f_bond
-                cur_f_bond = 0
-                if current_yen_asset >= deficit:
-                    current_yen_asset -= deficit
-                    current_cash += deficit
-                else:
-                    # 全て尽きた
-                    current_cash += current_yen_asset
-                    current_yen_asset = 0
-                    if current_cash < 0 and bankrupt_year is None:
-                        bankrupt_year = year
-                
-    elif current_cash > safety_net_amount and invest_surplus:
-        surplus = current_cash - safety_net_amount
-        current_cash = safety_net_amount
-        
-        # 外国株式へ配分
-        cur_f_stock += surplus * (foreign_allocation / 100.0)
-        # 残りは国内資産へ
-        current_yen_asset += surplus * (1 - foreign_allocation / 100.0)
-
-    total_assets = current_cash + current_yen_asset + cur_f_cash + cur_f_bond + cur_f_stock + cur_ideco
-    if total_assets < min_assets_val:
-        min_assets_val = total_assets
-        min_assets_year = year
-
-    cash_hist.append(current_cash / 10000)
-    yen_hist.append(current_yen_asset / 10000)
-    f_cash_hist.append(cur_f_cash / 10000)
-    f_bond_hist.append(cur_f_bond / 10000)
-    f_stock_hist.append(cur_f_stock / 10000)
-    ideco_hist.append(cur_ideco / 10000)
-    loan_hist.append(current_loan_balance / 10000)
-    payment_hist.append(annual_payment / 10000)
-    balance_hist.append((income - spending - ideco_add)/10000)
-
-df['貯金'] = cash_hist
-df['国内資産'] = yen_hist
-df['外国(現金)'] = f_cash_hist
-df['外国(債券)'] = f_bond_hist
-df['外国(株)'] = f_stock_hist
-df['iDeCo'] = ideco_hist
-df['ローン残高'] = loan_hist
-df['ローン返済'] = payment_hist
-df['年間収支'] = balance_hist
-df['総資産'] = df['貯金'] + df['国内資産'] + df['外国(現金)'] + df['外国(債券)'] + df['外国(株)'] + df['iDeCo']
-df['純資産'] = df['総資産'] - df['ローン残高']
-df['教育・養育・仕送り'] = df['教育費'] + df['養育費'] + df['仕送り']
-
-# --- 表示 ---
-st.title("将来家計シミュレーション 📊")
-st.markdown("ポートフォリオ詳細分析版")
-
-# KPI
-total_child_cost = df['教育・養育・仕送り'].sum()
-final_net_assets = df['純資産'].iloc[-1]
-min_assets_disp = df.loc[df['西暦'] == min_assets_year, '総資産'].values[0]
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("👶 教育・養育費の総額", f"{total_child_cost:,.0f} 万円", "仕送り含む" if (c1_boarding or c2_boarding) else "自宅通学")
-with col2:
-    if bankrupt_year:
-        st.error(f"⚠️ {bankrupt_year}年に資金ショート")
-    else:
-        is_safe = min_assets_disp > safety_net_val
-        color = "normal" if is_safe else "off"
-        st.metric("📉 最も家計が苦しくなる時期", f"{min_assets_year}年", f"残高 {min_assets_disp:,.0f} 万円", delta_color=color)
-with col3:
-    st.metric("👴 老後時点の純資産 (ローン完済後)", f"{final_net_assets:,.0f} 万円")
-
-# グラフ
-st.subheader("📈 資産推移シミュレーション")
-st.caption("マウスを合わせると、年齢と金額(万円)が確認できます。")
-
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['西暦'], y=df['総資産'], name='<b>総資産</b>', line=dict(color='#2563eb', width=4), hovertemplate='%{y:,.0f}万円'))
-# 積み上げ (リスク高い順あるいは流動性順)
-fig.add_trace(go.Scatter(x=df['西暦'], y=df['外国(株)'], name='外国株・投信', line=dict(color='#059669', width=1), stackgroup='one', hovertemplate='%{y:,.0f}万円'))
-fig.add_trace(go.Scatter(x=df['西暦'], y=df['iDeCo'], name='iDeCo(外国株)', line=dict(color='#f59e0b', width=1), stackgroup='one', hovertemplate='%{y:,.0f}万円'))
-fig.add_trace(go.Scatter(x=df['西暦'], y=df['外国(債券)'], name='外国債券', line=dict(color='#34d399', width=1), stackgroup='one', hovertemplate='%{y:,.0f}万円'))
-fig.add_trace(go.Scatter(x=df['西暦'], y=df['外国(現金)'], name='外貨預金', line=dict(color='#6ee7b7', width=1), stackgroup='one', hovertemplate='%{y:,.0f}万円'))
-fig.add_trace(go.Scatter(x=df['西暦'], y=df['国内資産'], name='国内資産', line=dict(color='#93c5fd', width=1), stackgroup='one', hovertemplate='%{y:,.0f}万円'))
-fig.add_trace(go.Scatter(x=df['西暦'], y=df['貯金'], name='貯金(生活防衛)', line=dict(color='#bfdbfe', width=1), stackgroup='one', hovertemplate='%{y:,.0f}万円'))
-
-fig.add_trace(go.Scatter(x=df['西暦'], y=df['ローン残高'], name='ローン残高', line=dict(color='#ef4444', dash='dot', width=2), hovertemplate='%{y:,.0f}万円'))
-
-tick_vals = []
-tick_text = []
-for index, row in df.iterrows():
-    if (row['西暦'] - start_year) % 5 == 0:
-        tick_vals.append(row['西暦'])
-        tick_text.append(f"{row['西暦']}<br>(主{int(row['世帯主年齢'])}/子{int(row['第1子年齢'])})")
-
-fig.update_layout(
-    xaxis=dict(title="西暦 (世帯主年齢/第1子年齢)", tickmode='array', tickvals=tick_vals, ticktext=tick_text),
-    yaxis_title="金額 (万円)",
-    hovermode="x unified",
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-)
-st.plotly_chart(fig, use_container_width=True)
-
-# データテーブル
-with st.expander("詳細データを見る"):
-    display_cols = ['西暦', '世帯主年齢', '世帯収入', '年間収支', '総資産', '貯金', '国内資産', '外国(株)', '外国(債券)', 'iDeCo', 'ローン残高']
-    st.dataframe(df[display_cols].style.format("{:,.0f}"), use_container_width=True)
-
-# AI診断
-st.markdown("---")
-st.subheader("🤖 AIファイナンシャル・プランナー")
-user_api_key = st.text_input("Gemini APIキー (入力すると診断開始)", type="password")
-
-if st.button("投資・家計診断を実行する") and user_api_key:
+# ==========================================
+# 共通関数: 数値フォーマット・生成
+# ==========================================
+def format_japanese_answer(num):
     try:
-        genai.configure(api_key=user_api_key)
-        model = genai.GenerativeModel('gemini-flash-latest')
-        
-        boarding_status = "なし"
-        if c1_boarding or c2_boarding: boarding_status = f"あり(年{boarding_cost_yearly}万)"
-        
-        # アセットアロケーション計算
-        total_now = initial_cash + initial_invest_yen + initial_foreign_cash + initial_foreign_bond + initial_foreign_stock + initial_ideco
-        ratio_stock = (initial_foreign_stock + initial_ideco) / total_now * 100
-        ratio_safe = (initial_cash + initial_invest_yen + initial_foreign_cash) / total_now * 100
-        
-        prompt = f"""
-        FPとして、以下のシミュレーション結果に基づき、投資戦略と家計へのアドバイスをお願いします。
+        int_num = int(num)
+    except:
+        return str(num)
+    if int_num == 0: return "0"
+    units = [(10**12, "兆"), (10**8, "億"), (10**4, "万"), (1, "")]
+    result = []
+    remaining = abs(int_num)
+    for unit_val, unit_name in units:
+        if remaining >= unit_val:
+            val = remaining // unit_val
+            remaining %= unit_val
+            result.append(f"{val:,}{unit_name}")
+    return "".join(result) if result else "0"
 
-        # ユーザー属性
-        - 世帯主: {head_age}歳, 年収{head_income_base}万 (定年{retirement_age}歳)
-        - 子供: 第1子{c1_year}年生まれ({c1_edu})
+def format_number_with_unit_label(value):
+    if value >= 10**8:
+        if value % 10**8 == 0: return f"{value // 10**8:,}億"
+        else: return f"{value / 10**8:.1f}億".replace(".0", "")
+    elif value >= 10**4:
+        if value % 10**4 == 0: return f"{value // 10**4:,}万"
+        else: return f"{value / 10**4:.1f}万".replace(".0", "")
+    else:
+        return f"{value:,}"
+
+def get_random_val(min_val, max_val, simple=False):
+    val = random.randint(min_val, max_val)
+    if simple:
+        digits = len(str(val))
+        if digits > 1:
+            bases = [10, 20, 30, 40, 50, 60, 70, 80, 90, 15, 25, 12, 18]
+            base = random.choice(bases)
+            min_digits = len(str(min_val))
+            target_digits = random.randint(min_digits, len(str(max_val)))
+            power = max(0, target_digits - 2)
+            val = base * (10**power)
+            if val < min_val: val = min_val
+            if val > max_val: val = max_val
+            if val < 100: val = (val // 10) * 10
+    return int(val)
+
+# ==========================================
+# シナリオデータ定義 (クイズ・トレーニング用)
+# ==========================================
+SCENARIOS = [
+    # パターン1: A * B
+    { "pattern": 1, "template": "単価 <b>{label1}円</b> の商品が <b>{label2}個</b> 売れました。<br>売上推定値は？", "range1": (100, 50000), "range2": (100, 100000), "unit1":"円", "unit2":"個" },
+    { "pattern": 1, "template": "1人あたり <b>{label1}円</b> のコストがかかる研修に <b>{label2}人</b> が参加します。<br>総費用推定値は？", "range1": (5000, 200000), "range2": (10, 5000), "unit1":"円", "unit2":"人" },
+    { "pattern": 1, "template": "月商 <b>{label1}円</b> の店舗を <b>{label2}店舗</b> 運営しています。<br>全店の月商合計は？", "range1": (1000000, 50000000), "range2": (3, 1000), "unit1":"円", "unit2":"店舗" },
+    { "pattern": 1, "template": "契約単価 <b>{label1}円</b> のサブスク会員が <b>{label2}人</b> います。<br>毎月の売上は？", "range1": (500, 10000), "range2": (1000, 1000000), "unit1":"円", "unit2":"人" },
+    # パターン2: A * r
+    { "pattern": 2, "template": "売上高 <b>{label1}円</b> に対して、営業利益率は <b>{pct}%</b> です。<br>営業利益は？", "range1": (100000000, 1000000000000), "pct_range": (1, 30), "unit1":"円" },
+    { "pattern": 2, "template": "市場規模 <b>{label1}円</b> の業界で、シェア <b>{pct}%</b> を獲得しました。<br>自社の売上は？", "range1": (1000000000, 1000000000000), "pct_range": (1, 60), "unit1":"円" },
+    { "pattern": 2, "template": "予算 <b>{label1}円</b> のうち、すでに <b>{pct}%</b> を消化しました。<br>消化した金額は？", "range1": (1000000, 1000000000), "pct_range": (5, 95), "unit1":"円" },
+    { "pattern": 2, "template": "投資額 <b>{label1}円</b> に対して、リターン（利回り）が <b>{pct}%</b> ありました。<br>利益額は？", "range1": (1000000, 10000000000), "pct_range": (3, 20), "unit1":"円" },
+    # パターン3: A * B * r
+    { "pattern": 3, "template": "単価 <b>{label1}円</b> の商品を <b>{label2}個</b> 販売し、利益率は <b>{pct}%</b> でした。<br>利益額は？", "range1": (100, 20000), "range2": (100, 50000), "pct_range": (5, 40), "unit1":"円", "unit2":"個" },
+    { "pattern": 3, "template": "客単価 <b>{label1}円</b> で <b>{label2}人</b> が来店し、原価率は <b>{pct}%</b> です。<br>原価の総額は？", "range1": (500, 10000), "range2": (100, 50000), "pct_range": (20, 80), "unit1":"円", "unit2":"人" },
+    { "pattern": 3, "template": "案件単価 <b>{label1}円</b> の案件が <b>{label2}件</b> あり、成約率は <b>{pct}%</b> でした。<br>成約による売上合計は？", "range1": (100000, 5000000), "range2": (10, 500), "pct_range": (5, 60), "unit1":"円", "unit2":"件" },
+    # パターン4: A * B(年)
+    { "pattern": 4, "template": "子会社株式の減損テスト。将来CF <b>{label1}円</b> が <b>{label2}</b> 続くと仮定します。<br>割引前のCF総額は？", "range1": (10000000, 5000000000), "range2": (3, 15), "suffix2": "年", "unit1":"円", "unit2":"年間" },
+    { "pattern": 4, "template": "投資案件の評価。年間 <b>{label1}円</b> のリターンが <b>{label2}</b> 継続する見込みです。<br>期間累計のリターンは？", "range1": (1000000, 1000000000), "range2": (3, 20), "suffix2": "年", "unit1":"円", "unit2":"年間" },
+    { "pattern": 4, "template": "新規事業のPL計画。年間固定費 <b>{label1}円</b> が <b>{label2}</b> かかる見通しです。<br>固定費の総額は？", "range1": (5000000, 500000000), "range2": (2, 5), "suffix2": "年", "unit1":"円", "unit2":"年間" }
+]
+
+def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts=None, simple_pct=None):
+    if simple_amounts is None: simple_amounts = not is_advanced
+    if simple_pct is None: simple_pct = not is_advanced
+
+    if force_pattern:
+        candidates = [s for s in SCENARIOS if s['pattern'] == force_pattern]
+    else:
+        candidates = SCENARIOS
         
-        # 現在のポートフォリオ (総額 {total_now:,.0f}万円)
-        - 安全資産(現預金・国内等): {ratio_safe:.1f}%
-        - 外国債券: {(initial_foreign_bond/total_now*100):.1f}%
-        - 外国株式(株・投信・iDeCo): {ratio_stock:.1f}%
-        - 為替シナリオ: {fx_scenario_key}
+    scenario = random.choice(candidates)
+    pattern = scenario['pattern']
+    
+    val1 = get_random_val(scenario['range1'][0], scenario['range1'][1], simple=simple_amounts)
+    val2 = 1
+    pct = 0
+    
+    if 'range2' in scenario:
+        val2 = get_random_val(scenario['range2'][0], scenario['range2'][1], simple=simple_amounts)
         
-        # 将来予測
-        - 最も苦しい時期: {min_assets_year}年 (資産残高 {min_assets_disp:,.0f}万円)
-        - 老後純資産: {final_net_assets:,.0f}万円
+    if 'pct_range' in scenario:
+        min_p, max_p = scenario['pct_range']
+        excluded_pct = [10, 50]
+        if simple_pct:
+            candidates_pct = list(range(min_p, max_p+1, 5))
+            candidates_pct = [p for p in candidates_pct if p not in excluded_pct and p != 0]
+            if not candidates_pct: pct = 5
+            else: pct = random.choice(candidates_pct)
+        else:
+            while True:
+                pct = random.randint(min_p, max_p)
+                if pct not in excluded_pct: break
+    
+    if simple_amounts:
+        label1 = format_number_with_unit_label(val1)
+    else:
+        label1 = f"{val1:,}"
+    
+    label2 = ""
+    suffix2 = scenario.get('suffix2', '')
+    
+    if pattern in [1, 3]:
+        if simple_amounts:
+            label2 = format_number_with_unit_label(val2)
+        else:
+            label2 = f"{val2:,}"
+    elif pattern == 4:
+        label2 = f"{val2}{suffix2}"
         
-        # アドバイスのポイント
-        1. 現在のポートフォリオのリスク許容度適合性（38歳、子供ありの家庭として）
-        2. 教育費ピーク時におけるリスク資産取り崩しの可能性と対策
-        3. 為替リスクへの脆弱性と、今後の投資戦略（債券や国内資産の比率など）
+    correct_val = 0
+    if pattern == 1: correct_val = val1 * val2
+    elif pattern == 2: correct_val = val1 * (pct / 100.0)
+    elif pattern == 3: correct_val = val1 * val2 * (pct / 100.0)
+    elif pattern == 4: correct_val = val1 * val2
+
+    q_text = scenario['template'].format(label1=label1, label2=label2, pct=pct)
+    
+    unit1 = scenario.get('unit1', '')
+    unit2 = scenario.get('unit2', '')
+    if pattern == 4: unit2 = suffix2
+    
+    return {
+        "q_text": q_text,
+        "correct": correct_val,
+        "pattern": pattern,
+        "raw_val1": val1, "raw_val2": val2, "raw_pct": pct,
+        "unit1": unit1, "unit2": unit2,
+        "is_advanced": is_advanced
+    }
+
+# ==========================================
+# フラッシュカード用データ生成
+# ==========================================
+def generate_flashcard_data():
+    """
+    フラッシュカード用の問題生成
+    必ず1, 10, 100, 1000 形式の掛け算
+    """
+    while True:
+        # ベース: 1, 10, 100, 1000
+        base_options = [1, 10, 100, 1000]
+        # 単位: "", "万", "億"
+        unit_options = ["", "万", "億"]
         
-        投資の観点を中心に、辛口かつ具体的に3点お願いします。
-        """
-        with st.spinner("AIがポートフォリオを分析中..."):
-            st.markdown(model.generate_content(prompt).text)
-    except Exception as e:
-        st.error(f"エラーが発生しました: {e}")
+        # 要素1
+        b1 = random.choice(base_options)
+        u1 = random.choice(unit_options)
+        # 要素2
+        b2 = random.choice(base_options)
+        u2 = random.choice(unit_options)
+        
+        # 数値化
+        val1 = b1 * (10**8 if u1=="億" else 10**4 if u1=="万" else 1)
+        val2 = b2 * (10**8 if u2=="億" else 10**4 if u2=="万" else 1)
+        
+        ans = val1 * val2
+        
+        # 上限チェック (フラッシュカードは桁感特化なので多少大きくても良いが、兆を超えすぎると読みづらい)
+        # ここではMAX_LIMIT (100兆) を目安に
+        if ans <= MAX_LIMIT:
+            # 表示用ラベル作成 (例: 100万)
+            # 万、億がついていない場合はカンマ区切りにする
+            l1 = f"{b1:,}{u1}" if u1 else f"{b1:,}"
+            l2 = f"{b2:,}{u2}" if u2 else f"{b2:,}"
+            
+            return {
+                "q_text": f"{l1} × {l2}",
+                "correct": ans
+            }
+
+# ==========================================
+# タイマー表示 (JavaScript)
+# ==========================================
+def show_timer():
+    timer_html = """
+    <div style="font-size:20px; color:#FACC15; font-weight:bold; margin-bottom:10px; font-family:monospace;">
+        ⏱️ Time: <span id="time_display">0.0</span>s
+    </div>
+    <script>
+        let start = Date.now();
+        let timer = setInterval(function() {
+            let delta = Date.now() - start;
+            let el = document.getElementById("time_display");
+            if(el) {
+                el.innerHTML = (delta / 1000).toFixed(1);
+            }
+        }, 100);
+    </script>
+    """
+    st.components.v1.html(timer_html, height=50)
+
+# ==========================================
+# スコア計算
+# ==========================================
+def calculate_score(user_val, correct_val):
+    if correct_val == 0: return 0, 0.0, False
+    diff_pct = abs((user_val - correct_val) / correct_val * 100)
+    is_perfect = (user_val == correct_val)
+    points = 0
+    if diff_pct <= 2: points = 10
+    elif diff_pct <= 4: points = 9
+    elif diff_pct <= 6: points = 8
+    elif diff_pct <= 8: points = 7
+    elif diff_pct <= 10: points = 6
+    elif diff_pct <= 12: points = 5
+    elif diff_pct <= 14: points = 4
+    elif diff_pct <= 16: points = 3
+    elif diff_pct <= 18: points = 2
+    elif diff_pct <= 20: points = 1
+    else: points = 0
+    return points, diff_pct, is_perfect
+
+# ==========================================
+# ゲーム進行管理
+# ==========================================
+def init_game_state():
+    st.session_state.current_q_idx = 1
+    st.session_state.score = 0
+    st.session_state.exact_matches = 0
+    st.session_state.total_duration = 0.0
+    st.session_state.current_start_time = time.time()
+    st.session_state.game_finished = False
+    st.session_state.quiz_data = None
+    st.session_state.quiz_answered = False
+    st.session_state.history = []
+    st.session_state.ranked_in = False
+    # フラッシュカード用
+    st.session_state.flash_state = "question" # question or answer
+
+def next_question():
+    if st.session_state.current_q_idx >= TOTAL_QUESTIONS:
+        st.session_state.game_finished = True
+    else:
+        st.session_state.current_q_idx += 1
+        st.session_state.quiz_data = None
+        st.session_state.quiz_answered = False
+        st.session_state.current_start_time = time.time()
+
+# ==========================================
+# 結果画面共通処理
+# ==========================================
+def show_result_screen(mode_name):
+    mins = int(st.session_state.total_duration // 60)
+    secs = int(st.session_state.total_duration % 60)
+    
+    st.markdown(f"""
+    <div class="css-card" style="text-align: center;">
+        <h3 style="color: #38BDF8;">MISSION COMPLETE</h3>
+        <p style="font-size: 20px; color: #E2E8F0;">TOTAL SCORE</p>
+        <p style="color: #FACC15; font-weight: bold; font-size: 48px; margin: 0;">{st.session_state.score}<span style="font-size: 24px;"> / 100</span></p>
+        {'<p style="font-size: 16px; color: #38BDF8; margin-top: 10px;">🏆 ピタリ賞: ' + str(st.session_state.exact_matches) + ' 回</p>' if 'チャレンジ' in mode_name else ''}
+        <hr style="border-color: #334155;">
+        <p style="font-size: 18px; color: #F8FAFC;">⏱️ 合計タイム: <b>{mins}分 {secs}秒</b></p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if not st.session_state.ranked_in:
+        with st.container():
+            st.markdown("### 🏆 ランキングに登録")
+            c1, c2 = st.columns([3, 1])
+            nickname = c1.text_input("ニックネームを入力", placeholder="名無しさん")
+            if c2.button("登録する", type="primary"):
+                if not nickname: nickname = "名無しさん"
+                save_ranking(nickname, mode_name, st.session_state.score, st.session_state.total_duration)
+                st.session_state.ranked_in = True
+                st.rerun()
+    else:
+        st.success("ランキングに登録しました！")
+        st.markdown(f"### 📊 {mode_name} のランキング")
+        display_ranking(filter_mode=mode_name)
+
+    st.markdown("---")
+    st.write("### 📝 結果詳細")
+    for h in st.session_state.history:
+        label = h['result_label']
+        color = '#FACC15' if ('⭕' in label or '点' in label and int(label.replace('点',''))>=8) else '#EF4444'
+        st.markdown(f"""
+        <div class="history-row">
+            <span style="color:{color}; font-weight:bold; margin-right:10px; min-width:50px;">{label}</span>
+            <span style="color:#E2E8F0; margin-right:15px; flex-grow:1;">{h['formula_kanji']}</span>
+            <span style="color:#38BDF8; font-family:monospace;">{h['time']:.1f}s</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.write("")
+    c1, c2 = st.columns(2)
+    if c1.button("もう一度挑戦", type="primary"):
+        init_game_state()
+        st.rerun()
+    if c2.button("トップに戻る"):
+        st.session_state.page = "home"
+        st.rerun()
+
+# ==========================================
+# モード1：チャレンジモード (入力式)
+# ==========================================
+def mode_training(advanced=False):
+    mode_name = "チャレンジ(上級)" if advanced else "チャレンジ(基礎)"
+    st.markdown(f"## 💪 {mode_name}")
+    
+    if st.session_state.game_finished:
+        show_result_screen(mode_name)
+        return
+
+    progress = st.session_state.current_q_idx / TOTAL_QUESTIONS
+    st.progress(progress)
+    st.caption(f"Q.{st.session_state.current_q_idx} / {TOTAL_QUESTIONS} | Score: {st.session_state.score}")
+    
+    if st.button("トップに戻る（中断）"):
+        st.session_state.page = "home"
+        st.rerun()
+
+    if st.session_state.quiz_data is None:
+        force_p = None
+        if advanced:
+            if st.session_state.current_q_idx > 6: force_p = 3
+        else:
+            while True:
+                temp_q = generate_question_data(is_advanced=False)
+                if temp_q['pattern'] != 3:
+                    st.session_state.quiz_data = temp_q
+                    break
+        if st.session_state.quiz_data is None:
+             st.session_state.quiz_data = generate_question_data(is_advanced=advanced, force_pattern=force_p)
+
+    q = st.session_state.quiz_data
+
+    st.markdown(f"""
+    <div class="css-card">
+        <h3 style="margin-top:0; color: #38BDF8;">Question</h3>
+        <p style="font-size: 18px; line-height: 1.6; color: #F1F5F9;">{q['q_text']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if not st.session_state.quiz_answered:
+        show_timer()
+    
+    user_ans = st.number_input(
+        "概算解答を入力 (円)", 
+        value=0, step=1, format="%d",
+        key=f"train_ans_{st.session_state.current_q_idx}"
+    )
+    
+    if user_ans > 0:
+        st.markdown(f"<p style='color:#FACC15; font-weight:bold;'>入力プレビュー: {user_ans:,} 円</p>", unsafe_allow_html=True)
+    
+    if not st.session_state.quiz_answered:
+        if st.button("答え合わせ"):
+            elapsed = time.time() - st.session_state.current_start_time
+            st.session_state.total_duration += elapsed
+            st.session_state.current_q_time = elapsed
+            st.session_state.quiz_answered = True
+            st.rerun()
+    else:
+        correct_val = q['correct']
+        pattern_used = q['pattern']
+        v1 = q['raw_val1']
+        v2 = q['raw_val2']
+        pct = q['raw_pct']
+        u1 = q['unit1']
+        u2 = q['unit2']
+        
+        calc_str_arabic = ""
+        if pattern_used == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
+        elif pattern_used == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
+        elif pattern_used == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
+
+        f_v1 = format_japanese_answer(v1) + u1
+        f_ans = format_japanese_answer(correct_val) + "円"
+        calc_str_kanji = ""
+        if pattern_used == 1: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+        elif pattern_used == 2: 
+            calc_str_kanji = f"{f_v1} × {pct}% ＝ {f_ans}"
+        elif pattern_used == 3: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} × {pct}% ＝ {f_ans}"
+        elif pattern_used == 4: 
+            f_v2 = f"{v2}{u2}"
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+
+        points, diff_pct, is_perfect = calculate_score(user_ans, correct_val)
+        
+        if len(st.session_state.history) < st.session_state.current_q_idx:
+            st.session_state.history.append({
+                "result_label": f"{points}点",
+                "points": points,
+                "formula_kanji": calc_str_kanji,
+                "time": st.session_state.current_q_time
+            })
+
+        st.markdown(f"あなたの回答: **{user_ans:,}**")
+        st.info(f"🧮 計算イメージ: {calc_str_arabic}")
+        st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(correct_val)}</span> <span style='font-size: 14px; color: #888;'>({correct_val:,})</span>", unsafe_allow_html=True)
+        
+        if is_perfect:
+            st.markdown(f"<div style='background-color:rgba(250, 204, 21, 0.2); padding:10px; border-radius:5px; text-align:center; color:#FACC15; font-weight:bold; margin-bottom:10px;'>🏆 ピタリ賞！ 獲得ポイント: {points}点</div>", unsafe_allow_html=True)
+        elif points >= 8:
+            st.success(f"⭕ 素晴らしい！ 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
+        elif points >= 1:
+            st.warning(f"🔺 まずまず！ 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
+        else:
+            st.error(f"❌ 残念... 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
+
+        if st.button("次の問題へ", type="primary"):
+            st.session_state.score += points
+            if is_perfect: st.session_state.exact_matches += 1
+            next_question()
+            st.rerun()
+
+# ==========================================
+# モード2：お気軽モード (4択式)
+# ==========================================
+def mode_quiz(advanced=False):
+    mode_name = "お気軽(上級)" if advanced else "お気軽(基礎)"
+    st.markdown(f"## 🧩 {mode_name}")
+    
+    if st.session_state.game_finished:
+        show_result_screen(mode_name)
+        return
+
+    progress = st.session_state.current_q_idx / TOTAL_QUESTIONS
+    st.progress(progress)
+    st.caption(f"Q.{st.session_state.current_q_idx} / {TOTAL_QUESTIONS} | Score: {st.session_state.score}")
+
+    if st.button("トップに戻る（中断）"):
+        st.session_state.page = "home"
+        st.rerun()
+
+    if st.session_state.quiz_data is None:
+        force_p = None
+        if advanced:
+            if st.session_state.current_q_idx > 6: force_p = 3
+        else:
+            while True:
+                temp_q = generate_question_data(is_advanced=False)
+                if temp_q['pattern'] != 3:
+                    st.session_state.quiz_data = temp_q
+                    break
+        
+        if st.session_state.quiz_data is None:
+             if not advanced:
+                 st.session_state.quiz_data = generate_question_data(is_advanced=False, force_pattern=force_p, simple_amounts=False, simple_pct=True)
+             else:
+                 st.session_state.quiz_data = generate_question_data(is_advanced=True, force_pattern=force_p)
+        
+        q = st.session_state.quiz_data
+        correct = q['correct']
+        options = [correct]
+        
+        if advanced:
+            multipliers = [0.85, 0.90, 0.95, 1.05, 1.10, 1.15]
+            selected_mults = random.sample(multipliers, 3)
+            for m in selected_mults:
+                options.append(correct * m)
+        else:
+            if q['pattern'] == 2:
+                options.extend([correct * 0.8, correct * 1.2, correct * 1.5])
+            else:
+                options.append(correct * 10)
+                options.append(correct / 10)
+                options.append(random.choice([correct * 100, correct / 100, correct * 2]))
+
+        random.shuffle(options)
+        q['options'] = options
+
+    q = st.session_state.quiz_data
+    
+    st.markdown(f"""
+    <div class="css-card">
+        <h3 style="margin-top:0; color: #38BDF8;">Question</h3>
+        <p style="font-size: 18px; line-height: 1.6; color: #F1F5F9;">{q['q_text']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if not st.session_state.quiz_answered:
+        show_timer()
+
+    if not st.session_state.quiz_answered:
+        col1, col2 = st.columns(2)
+        for i, opt in enumerate(q['options']):
+            btn_label = format_japanese_answer(opt)
+            target_col = col1 if i % 2 == 0 else col2
+            
+            if target_col.button(f"{btn_label}", key=f"q_{st.session_state.current_q_idx}_opt_{i}", use_container_width=True):
+                elapsed = time.time() - st.session_state.current_start_time
+                st.session_state.total_duration += elapsed
+                st.session_state.current_q_time = elapsed
+                st.session_state.quiz_answered = True
+                st.session_state.user_choice = opt
+                st.rerun()
+    else:
+        user_val = st.session_state.user_choice
+        correct_val = q['correct']
+        v1 = q['raw_val1']
+        v2 = q['raw_val2']
+        pct = q['raw_pct']
+        pat = q['pattern']
+        u1 = q['unit1']
+        u2 = q['unit2']
+        
+        calc_str_arabic = ""
+        if pat == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
+        elif pat == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
+        elif pat == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
+        elif pat == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
+
+        f_v1 = format_japanese_answer(v1) + u1
+        f_ans = format_japanese_answer(correct_val) + "円"
+        calc_str_kanji = ""
+        if pat == 1: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+        elif pat == 2: 
+            calc_str_kanji = f"{f_v1} × {pct}% ＝ {f_ans}"
+        elif pat == 3: 
+            f_v2 = format_japanese_answer(v2) + u2
+            calc_str_kanji = f"{f_v1} × {f_v2} × {pct}% ＝ {f_ans}"
+        elif pat == 4: 
+            f_v2 = f"{v2}{u2}"
+            calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+
+        ratio = user_val / correct_val if correct_val != 0 else 0
+        is_correct = (0.99 <= ratio <= 1.01)
+        
+        if len(st.session_state.history) < st.session_state.current_q_idx:
+            st.session_state.history.append({
+                "is_correct": is_correct,
+                "result_label": "⭕" if is_correct else "❌",
+                "formula_kanji": calc_str_kanji,
+                "time": st.session_state.current_q_time
+            })
+        
+        if is_correct: 
+            st.success("🎉 正解！")
+        else:
+            st.error(f"❌ 不正解... 正解は 「{format_japanese_answer(correct_val)}」")
+        
+        st.info(f"🧮 計算イメージ: {calc_str_arabic}")
+
+        if st.button("次の問題へ", type="primary"):
+            if is_correct: st.session_state.score += 1
+            next_question()
+            st.rerun()
+
+# ==========================================
+# モード3: フラッシュカード (桁感特訓)
+# ==========================================
+def mode_flashcard():
+    st.markdown("## ⚡ フラッシュカード（桁感特訓）")
+    
+    if st.button("トップに戻る"):
+        st.session_state.page = "home"
+        st.rerun()
+        
+    st.caption("エンドレスモード: タップして次々と答えを確認しましょう。")
+
+    if st.session_state.quiz_data is None:
+        st.session_state.quiz_data = generate_flashcard_data()
+        st.session_state.flash_state = "question"
+
+    q = st.session_state.quiz_data
+
+    # カードコンテナ
+    st.markdown(f"""
+    <div class="css-card">
+        <div class="flashcard-q">{q['q_text']}</div>
+        {"<div class='flashcard-a'>" + format_japanese_answer(q['correct']) + "</div>" if st.session_state.flash_state == "answer" else ""}
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.session_state.flash_state == "question":
+        if st.button("答えを見る", type="primary", use_container_width=True):
+            st.session_state.flash_state = "answer"
+            st.rerun()
+    else:
+        if st.button("次の問題へ", type="primary", use_container_width=True):
+            st.session_state.quiz_data = None
+            st.session_state.flash_state = "question"
+            st.rerun()
+
+# ==========================================
+# メイン
+# ==========================================
+def main():
+    st.set_page_config(page_title="ビジネス暗算道場", page_icon="💼")
+    apply_custom_design()
+    
+    if 'page' not in st.session_state:
+        st.session_state.page = "home"
+    if 'current_q_idx' not in st.session_state:
+        init_game_state()
+
+    if st.session_state.page == "home":
+        st.markdown("<h1 style='text-align: center; color: #38BDF8; font-size: 3.5rem; text-shadow: 0 0 20px rgba(56, 189, 248, 0.5);'>💼 ビジネス暗算道場</h1>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #94A3B8;'>Advance your mental math skills with professional tools.</p>", unsafe_allow_html=True)
+        st.write("")
+        st.write("")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.success("🧩 お気軽モード（4択式）")
+            if st.button("基礎編", key="quiz_basic_btn", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "quiz"
+                st.rerun()
+            if st.button("上級編", key="quiz_adv_btn", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "quiz_advanced"
+                st.rerun()
+            st.caption("4択で瞬時に判断する実戦モード。")
+
+        with col2:
+            st.info("📊 チャレンジモード（入力式）")
+            if st.button("基礎編", key="train_basic_btn", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "training"
+                st.rerun()
+            if st.button("上級編", key="train_adv_btn", use_container_width=True):
+                init_game_state()
+                st.session_state.page = "training_advanced"
+                st.rerun()
+            st.caption("誤差2%以内で満点。基礎は丸い数字、上級は実戦的。")
+
+        # フラッシュカード
+        if st.button("⚡ フラッシュカード（桁感特訓）", use_container_width=True):
+            init_game_state()
+            st.session_state.page = "flashcard"
+            st.rerun()
+        st.caption("「100×1万」など、0の数を瞬時に把握するエンドレスモード。")
+
+        # ランキング表示エリア (タブ分け)
+        st.write("")
+        st.markdown("---")
+        st.subheader("🏆 最新ランキング")
+        
+        tab1, tab2, tab3, tab4 = st.tabs(["お気軽(基礎)", "お気軽(上級)", "チャレンジ(基礎)", "チャレンジ(上級)"])
+        
+        with tab1:
+            st.caption("お気軽モード（基礎編）")
+            display_ranking("お気軽(基礎)")
+        with tab2:
+            st.caption("お気軽モード（上級編）")
+            display_ranking("お気軽(上級)")
+        with tab3:
+            st.caption("チャレンジモード（基礎編）")
+            display_ranking("チャレンジ(基礎)")
+        with tab4:
+            st.caption("チャレンジモード（上級編）")
+            display_ranking("チャレンジ(上級)")
+
+        st.write("")
+        st.markdown("---")
+        st.subheader("📚 おすすめの学習資料")
+        bk1, bk2 = st.columns(2)
+        with bk1:
+            st.markdown("Example: **外資系コンサルのフェルミ推定** ([Link](https://amazon.co.jp))")
+        with bk2:
+            st.markdown("Example: **決算書の読み方** ([Link](https://amazon.co.jp))")
+
+    elif st.session_state.page == "training":
+        mode_training(advanced=False)
+    elif st.session_state.page == "training_advanced":
+        mode_training(advanced=True)
+    elif st.session_state.page == "quiz":
+        mode_quiz(advanced=False)
+    elif st.session_state.page == "quiz_advanced":
+        mode_quiz(advanced=True)
+    elif st.session_state.page == "flashcard":
+        mode_flashcard()
+
+if __name__ == "__main__":
+    main()
