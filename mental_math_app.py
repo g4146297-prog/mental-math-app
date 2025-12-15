@@ -339,10 +339,10 @@ def generate_flashcard_data():
         st.session_state.flash_history = []
 
     while True:
-        p1 = random.randint(2, 10) # 100 ~ 100億
+        p1 = random.randint(2, 10) 
         p2 = random.randint(2, 10) 
         
-        if p1 + p2 > 13: # 10兆超えNG
+        if p1 + p2 > 13: 
             continue
             
         val1 = 10**p1
@@ -606,7 +606,6 @@ def mode_training(advanced=False):
             st.warning(f"🔺 まずまず！ 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
         else:
             st.error(f"❌ 残念... 獲得ポイント: {points}点 (ズレ: {diff_pct:.2f}%)")
-            # ★追加: 暗算のコツ
             st.info(get_mental_math_tip(pattern_used))
 
         if st.button("次の問題へ", type="primary"):
@@ -707,14 +706,12 @@ def mode_quiz(advanced=False):
         u1 = q['unit1']
         u2 = q['unit2']
         
-        # 解説用（アラビア数字）
         calc_str_arabic = ""
         if pat == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
         elif pat == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
         elif pat == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
         elif pat == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
 
-        # 履歴用（漢数字+単位）
         f_v1 = format_japanese_answer(v1) + u1
         f_ans = format_japanese_answer(correct_val) + "円"
         calc_str_kanji = ""
@@ -745,7 +742,6 @@ def mode_quiz(advanced=False):
             st.success("🎉 正解！")
         else:
             st.error(f"❌ 不正解... 正解は 「{format_japanese_answer(correct_val)}」")
-            # ★追加: 暗算のコツ
             st.info(get_mental_math_tip(pat))
         
         st.info(f"🧮 計算イメージ: {calc_str_arabic}")
@@ -754,6 +750,63 @@ def mode_quiz(advanced=False):
             if is_correct: st.session_state.score += 1
             next_question()
             st.rerun()
+
+# ==========================================
+# モード4: 暗算のTips集
+# ==========================================
+def mode_tips():
+    st.markdown("## 💡 暗算・概算のコツ")
+    
+    if st.button("トップに戻る"):
+        st.session_state.page = "home"
+        st.rerun()
+    
+    st.markdown("---")
+
+    st.markdown("### 1. 桁数と「0」の数")
+    st.info("""
+    大きな数字の計算では、まず「0」の数を把握することが基本です。
+    
+    * **万**: 0が **4つ** (10,000)
+    * **億**: 0が **8つ** (100,000,000)
+    * **兆**: 0が **12個** (1,000,000,000,000)
+    
+    例: **300万 × 50万** の場合
+    1. 数字部分: 3 × 5 = 15
+    2. 0の数: 「万(4つ)」＋「万(4つ)」＋ 300の0(2つ) ＋ 50の0(1つ) = 合計11個
+    3. 11個の0は「億(8つ)」と「000」
+    4. 答え: **1兆5000億**
+    """)
+
+    st.markdown("### 2. パーセント計算の近道")
+    st.success("""
+    パーセント計算は「基準となる数字」から推測すると早いです。
+    
+    * **10%**: 桁を1つ減らす（÷10）
+    * **1%**: 桁を2つ減らす（÷100）
+    * **5%**: 「10%」の半分
+    * **20%**: 「10%」の2倍
+    * **50%**: 半分にする（÷2）
+    * **25%**: 半分の半分にする（÷4）
+    
+    例: **1200万円の 15%**
+    * 10% = 120万円
+    * 5% = 60万円（120万の半分）
+    * 合計 = 180万円
+    """)
+
+    st.markdown("### 3. ビジネス概算の極意")
+    st.warning("""
+    ビジネスの現場では、1円単位の正確さよりも「桁が合っているか」「大まかな規模感は正しいか」が重要視されます。
+    
+    * **上2桁で計算する**: 「1,234,567円」は「120万円」として計算しても、概算としては十分です。
+    * **カンマを意識する**: 「,」は3桁ごとに打たれます。千、百万、十億の位置を視覚的に覚えましょう。
+    """)
+
+    st.markdown("---")
+    if st.button("トップに戻る", key="back_bottom"):
+        st.session_state.page = "home"
+        st.rerun()
 
 # ==========================================
 # モード3: フラッシュカード (桁感特訓)
@@ -841,6 +894,11 @@ def main():
             st.session_state.page = "flashcard"
             st.rerun()
         st.caption("「100×1万」など、0の数を瞬時に把握するエンドレスモード。")
+        
+        # Tipsボタン
+        if st.button("💡 暗算のコツ (Tips)", use_container_width=True):
+            st.session_state.page = "tips"
+            st.rerun()
 
         # ランキング表示エリア (タブ分け)
         st.write("")
@@ -881,6 +939,8 @@ def main():
         mode_quiz(advanced=True)
     elif st.session_state.page == "flashcard":
         mode_flashcard()
+    elif st.session_state.page == "tips":
+        mode_tips()
 
 if __name__ == "__main__":
     main()
