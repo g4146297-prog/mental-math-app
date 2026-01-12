@@ -9,7 +9,7 @@ from datetime import datetime
 # 定数・設定
 # ==========================================
 RANKING_FILE = "ranking.csv"
-MAX_LIMIT = 10**13
+MAX_LIMIT = 10**14
 TOTAL_QUESTIONS = 10
 
 # ==========================================
@@ -173,19 +173,27 @@ def display_ranking(filter_mode=None):
 # ==========================================
 def format_japanese_answer(num):
     try:
+        # 小数の場合は整数に丸める（概算なので）
         int_num = int(num)
     except:
         return str(num)
     if int_num == 0: return "0"
+    
+    sign = ""
+    if int_num < 0:
+        sign = "-"
+        int_num = abs(int_num)
+
     units = [(10**12, "兆"), (10**8, "億"), (10**4, "万"), (1, "")]
     result = []
-    remaining = abs(int_num)
+    remaining = int_num
     for unit_val, unit_name in units:
         if remaining >= unit_val:
             val = remaining // unit_val
             remaining %= unit_val
             result.append(f"{val:,}{unit_name}")
-    return "".join(result) if result else "0"
+    
+    return sign + "".join(result) if result else "0"
 
 def format_number_with_unit_label(value):
     if value >= 10**8:
@@ -214,28 +222,28 @@ def get_random_val(min_val, max_val, simple=False):
     return int(val)
 
 def get_mental_math_tip(pattern):
-    """
-    問題パターンに応じた暗算のコツを返す
-    """
     common_tips = [
         "💡 **コツ:** 数字の「0」を一旦無視して、ゼロ以外の数字同士を掛け算しましょう。最後に無視した0の個数を合計して付け足すと簡単です。",
         "💡 **コツ:** 「万」は0が4つ、「億」は0が8つです。単位を0に置き換えて桁数を整理してみましょう。",
         "💡 **コツ:** 概算の場合、有効数字（上1〜2桁）だけで計算し、あとは桁数を合わせるのがスピードアップの鍵です。",
         "💡 **コツ:** 3桁ごとのカンマ「,」の位置を意識しましょう。1,000(千)、1,000,000(百万)、1,000,000,000(十億)が区切りです。"
     ]
-    
     pct_tips = [
         "💡 **コツ:** 10%は「桁を1つ減らす」、1%は「桁を2つ減らす」ことと同じです。これを基準に倍数で考えましょう。",
         "💡 **コツ:** 5%は「10%の半分」、20%は「10%の2倍」と考えると計算が早くなります。",
         "💡 **コツ:** ×0.5 (50%) は「半分にする（÷2）」、×0.25 (25%) は「半分の半分（÷4）」と同じです。",
         "💡 **コツ:** 「70%」などは「100% - 30%」と考えたほうが引き算で早く解ける場合があります。"
     ]
+    fx_tips = [
+        "💡 **コツ:** 為替計算（円貨→外貨）は「割り算」ですが、概算では「掛け算（逆数）」でアタリをつけるのが有効です。",
+        "💡 **コツ:** 1ドル=150円の場合、「2ドル=300円」「10ドル=1500円」と基準を作っておくと早いです。",
+        "💡 **コツ:** 1円に近いレートの通貨（タカなど）は、そのまま日本円と同じ感覚で、最後に係数（1.2など）を掛けると楽です。",
+        "💡 **コツ:** ユーロやポンドなど高い通貨は、ドルよりも「少し高い」という感覚で補正しましょう。"
+    ]
     
-    # パターン2, 3は%が含まれる
-    if pattern in [2, 3]:
-        return random.choice(common_tips + pct_tips)
-    else:
-        return random.choice(common_tips)
+    if pattern in [2, 3]: return random.choice(common_tips + pct_tips)
+    elif pattern in [5, 6]: return random.choice(common_tips + fx_tips)
+    else: return random.choice(common_tips)
 
 # ==========================================
 # シナリオデータ定義
@@ -258,7 +266,22 @@ SCENARIOS = [
     # パターン4: A * B(年)
     { "pattern": 4, "template": "子会社株式の減損テスト。将来CF <b>{label1}円</b> が <b>{label2}</b> 続くと仮定します。<br>割引前のCF総額は？", "range1": (10000000, 5000000000), "range2": (3, 15), "suffix2": "年", "unit1":"円", "unit2":"年間" },
     { "pattern": 4, "template": "投資案件の評価。年間 <b>{label1}円</b> のリターンが <b>{label2}</b> 継続する見込みです。<br>期間累計のリターンは？", "range1": (1000000, 1000000000), "range2": (3, 20), "suffix2": "年", "unit1":"円", "unit2":"年間" },
-    { "pattern": 4, "template": "新規事業のPL計画。年間固定費 <b>{label1}円</b> が <b>{label2}</b> かかる見通しです。<br>固定費の総額は？", "range1": (5000000, 500000000), "range2": (2, 5), "suffix2": "年", "unit1":"円", "unit2":"年間" }
+    { "pattern": 4, "template": "新規事業のPL計画。年間固定費 <b>{label1}円</b> が <b>{label2}</b> かかる見通しです。<br>固定費の総額は？", "range1": (5000000, 500000000), "range2": (2, 5), "suffix2": "年", "unit1":"円", "unit2":"年間" },
+    
+    # --- パターン5: 為替 (外貨 -> 円) ---
+    { "pattern": 5, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>現地売上 <b>{label1}{currency}</b> は日本円でいくら？", "currency": "ドル", "rate_range": (130, 160), "range1": (1000, 1000000), "unit1": "ドル", "unit2": "円/ドル" },
+    { "pattern": 5, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>輸入コスト <b>{label1}{currency}</b> は日本円でいくら？", "currency": "ユーロ", "rate_range": (140, 170), "range1": (1000, 500000), "unit1": "ユーロ", "unit2": "円/ユーロ" },
+    { "pattern": 5, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>ロンドン支社の利益 <b>{label1}{currency}</b> は日本円でいくら？", "currency": "ポンド", "rate_range": (180, 210), "range1": (1000, 100000), "unit1": "ポンド", "unit2": "円/ポンド" },
+    { "pattern": 5, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>資源購入費 <b>{label1}{currency}</b> は日本円でいくら？", "currency": "豪ドル", "rate_range": (90, 110), "range1": (10000, 1000000), "unit1": "豪ドル", "unit2": "円/豪ドル" },
+    { "pattern": 5, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>中国工場のコスト <b>{label1}{currency}</b> は日本円でいくら？", "currency": "元", "rate_range": (19, 23), "range1": (10000, 5000000), "unit1": "元", "unit2": "円/元" },
+    # 追加: タイ、バングラデシュ、ブラジル
+    { "pattern": 5, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>バンコク支店の売上 <b>{label1}{currency}</b> は日本円でいくら？", "currency": "バーツ", "rate_range": (4.0, 5.0), "range1": (10000, 10000000), "unit1": "バーツ", "unit2": "円/バーツ" },
+    { "pattern": 5, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>ダッカ工場の経費 <b>{label1}{currency}</b> は日本円でいくら？", "currency": "タカ", "rate_range": (1.1, 1.4), "range1": (100000, 50000000), "unit1": "タカ", "unit2": "円/タカ" },
+    { "pattern": 5, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>サンパウロでの調達費 <b>{label1}{currency}</b> は日本円でいくら？", "currency": "レアル", "rate_range": (20, 30), "range1": (5000, 500000), "unit1": "レアル", "unit2": "円/レアル" },
+
+    # --- パターン6: 為替 (円 -> 外貨) ---
+    { "pattern": 6, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>予算 <b>{label1}円</b> は約何{currency}？", "currency": "ドル", "rate_range": (130, 160), "range1": (1000000, 100000000), "unit1": "円", "unit2": "円/ドル" },
+    { "pattern": 6, "template": "為替レートが 1{currency} = <b>{rate}円</b> のとき、<br>手持ち資金 <b>{label1}円</b> は約何{currency}？", "currency": "ユーロ", "rate_range": (140, 170), "range1": (1000000, 50000000), "unit1": "円", "unit2": "円/ユーロ" }
 ]
 
 def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts=None, simple_pct=None):
@@ -268,7 +291,11 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
     if force_pattern:
         candidates = [s for s in SCENARIOS if s['pattern'] == force_pattern]
     else:
-        candidates = SCENARIOS
+        # 上級編では全パターン、基礎編ではパターン1,2,4,5から選択
+        if is_advanced:
+            candidates = SCENARIOS
+        else:
+            candidates = [s for s in SCENARIOS if s['pattern'] in [1, 2, 4, 5]]
         
     scenario = random.choice(candidates)
     pattern = scenario['pattern']
@@ -277,7 +304,24 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
     val2 = 1
     pct = 0
     
-    if 'range2' in scenario:
+    # 為替レート (val2として使用)
+    if 'rate_range' in scenario:
+        min_r, max_r = scenario['rate_range']
+        # 範囲が小数の場合または値が小さい場合は小数レートも許容
+        if isinstance(min_r, float) or isinstance(max_r, float) or max_r < 10:
+             val2 = round(random.uniform(min_r, max_r), 2)
+             # simpleモードなら小数第一位までにする
+             if simple_amounts:
+                 val2 = round(val2, 1)
+        else:
+            if simple_amounts:
+                # 5刻みなどに丸める (範囲が狭い場合は1刻み)
+                step = 5
+                if max_r - min_r < step: step = 1
+                val2 = random.choice(list(range(min_r, max_r+1, step)))
+            else:
+                val2 = random.randint(min_r, max_r)
+    elif 'range2' in scenario:
         val2 = get_random_val(scenario['range2'][0], scenario['range2'][1], simple=simple_amounts)
         
     if 'pct_range' in scenario:
@@ -309,18 +353,33 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
             label2 = f"{val2:,}"
     elif pattern == 4:
         label2 = f"{val2}{suffix2}"
+    elif pattern in [5, 6]: # 為替レート
+        label2 = f"{val2}"
         
     correct_val = 0
+    q_currency = scenario.get('currency', '')
+    
     if pattern == 1: correct_val = val1 * val2
     elif pattern == 2: correct_val = val1 * (pct / 100.0)
     elif pattern == 3: correct_val = val1 * val2 * (pct / 100.0)
     elif pattern == 4: correct_val = val1 * val2
+    elif pattern == 5: # 外貨 -> 円 (掛け算)
+        correct_val = val1 * val2
+    elif pattern == 6: # 円 -> 外貨 (割り算)
+        correct_val = int(val1 / val2)
 
-    q_text = scenario['template'].format(label1=label1, label2=label2, pct=pct)
+    q_text = scenario['template'].format(label1=label1, label2=label2, pct=pct, rate=val2, currency=q_currency)
     
     unit1 = scenario.get('unit1', '')
     unit2 = scenario.get('unit2', '')
     if pattern == 4: unit2 = suffix2
+    if pattern == 5: unit2 = f"円/{q_currency}"
+    if pattern == 6: 
+        unit1 = "円"
+        unit2 = f"円/{q_currency}"
+    
+    correct_unit = "円"
+    if pattern == 6: correct_unit = q_currency
     
     return {
         "q_text": q_text,
@@ -328,6 +387,7 @@ def generate_question_data(is_advanced=False, force_pattern=None, simple_amounts
         "pattern": pattern,
         "raw_val1": val1, "raw_val2": val2, "raw_pct": pct,
         "unit1": unit1, "unit2": unit2,
+        "correct_unit": correct_unit,
         "is_advanced": is_advanced
     }
 
@@ -516,11 +576,15 @@ def mode_training(advanced=False):
     if st.session_state.quiz_data is None:
         force_p = None
         if advanced:
-            if st.session_state.current_q_idx > 6: force_p = 3
+            # 上級: 後半は難しいパターン
+            if st.session_state.current_q_idx > 6: 
+                # パターン3(3要素)か6(割り算)
+                force_p = random.choice([3, 6])
         else:
+            # 基礎: パターン3, 6は出さない
             while True:
                 temp_q = generate_question_data(is_advanced=False)
-                if temp_q['pattern'] != 3:
+                if temp_q['pattern'] not in [3, 6]:
                     st.session_state.quiz_data = temp_q
                     break
         if st.session_state.quiz_data is None:
@@ -538,14 +602,18 @@ def mode_training(advanced=False):
     if not st.session_state.quiz_answered:
         show_timer()
     
+    unit_label = "円"
+    if q.get('correct_unit'):
+        unit_label = q['correct_unit']
+    
     user_ans = st.number_input(
-        "概算解答を入力 (円)", 
+        f"概算解答を入力 ({unit_label})", 
         value=0, step=1, format="%d",
         key=f"train_ans_{st.session_state.current_q_idx}"
     )
     
     if user_ans > 0:
-        st.markdown(f"<p style='color:#FACC15; font-weight:bold;'>入力プレビュー: {user_ans:,} 円</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color:#FACC15; font-weight:bold;'>入力プレビュー: {user_ans:,} {unit_label}</p>", unsafe_allow_html=True)
     
     if not st.session_state.quiz_answered:
         if st.button("答え合わせ"):
@@ -562,15 +630,18 @@ def mode_training(advanced=False):
         pct = q['raw_pct']
         u1 = q['unit1']
         u2 = q['unit2']
+        c_unit = q.get('correct_unit', '円')
         
         calc_str_arabic = ""
         if pattern_used == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
         elif pattern_used == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
         elif pattern_used == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
         elif pattern_used == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
+        elif pattern_used == 5: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
+        elif pattern_used == 6: calc_str_arabic = f"{v1:,} ÷ {v2:,} = {correct_val:,.0f}"
 
         f_v1 = format_japanese_answer(v1) + u1
-        f_ans = format_japanese_answer(correct_val) + "円"
+        f_ans = format_japanese_answer(correct_val) + c_unit
         calc_str_kanji = ""
         if pattern_used == 1: 
             f_v2 = format_japanese_answer(v2) + u2
@@ -583,6 +654,10 @@ def mode_training(advanced=False):
         elif pattern_used == 4: 
             f_v2 = f"{v2}{u2}"
             calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+        elif pattern_used == 5: # 外貨->円
+            calc_str_kanji = f"{f_v1} × {v2}円 ＝ {f_ans}"
+        elif pattern_used == 6: # 円->外貨
+            calc_str_kanji = f"{f_v1} ÷ {v2}円 ＝ {f_ans}"
 
         points, diff_pct, is_perfect = calculate_score(user_ans, correct_val)
         
@@ -594,9 +669,9 @@ def mode_training(advanced=False):
                 "time": st.session_state.current_q_time
             })
 
-        st.markdown(f"あなたの回答: **{user_ans:,}**")
+        st.markdown(f"あなたの回答: **{user_ans:,}** {c_unit}")
         st.info(f"🧮 計算イメージ: {calc_str_arabic}")
-        st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(correct_val)}</span> <span style='font-size: 14px; color: #888;'>({correct_val:,})</span>", unsafe_allow_html=True)
+        st.markdown(f"**正解:** <span style='font-size: 20px; color: #FACC15;'>{format_japanese_answer(correct_val)}</span>{c_unit} <span style='font-size: 14px; color: #888;'>({correct_val:,})</span>", unsafe_allow_html=True)
         
         if is_perfect:
             st.markdown(f"<div style='background-color:rgba(250, 204, 21, 0.2); padding:10px; border-radius:5px; text-align:center; color:#FACC15; font-weight:bold; margin-bottom:10px;'>🏆 ピタリ賞！ 獲得ポイント: {points}点</div>", unsafe_allow_html=True)
@@ -636,11 +711,14 @@ def mode_quiz(advanced=False):
     if st.session_state.quiz_data is None:
         force_p = None
         if advanced:
-            if st.session_state.current_q_idx > 6: force_p = 3
+            # 上級: 後半は難しいパターン
+            if st.session_state.current_q_idx > 6:
+                force_p = random.choice([3, 6])
         else:
+            # 基礎: パターン3, 6は出さない
             while True:
                 temp_q = generate_question_data(is_advanced=False)
-                if temp_q['pattern'] != 3:
+                if temp_q['pattern'] not in [3, 6]:
                     st.session_state.quiz_data = temp_q
                     break
         
@@ -658,14 +736,15 @@ def mode_quiz(advanced=False):
             multipliers = [0.85, 0.90, 0.95, 1.05, 1.10, 1.15]
             selected_mults = random.sample(multipliers, 3)
             for m in selected_mults:
-                options.append(correct * m)
+                options.append(int(correct * m)) # 整数丸め
         else:
             if q['pattern'] == 2:
-                options.extend([correct * 0.8, correct * 1.2, correct * 1.5])
+                options.extend([int(correct * 0.8), int(correct * 1.2), int(correct * 1.5)])
             else:
-                options.append(correct * 10)
-                options.append(correct / 10)
-                options.append(random.choice([correct * 100, correct / 100, correct * 2]))
+                options.append(int(correct * 10))
+                options.append(int(correct / 10))
+                rnd = int(correct * 2) if correct > 0 else 1
+                options.append(rnd)
 
         random.shuffle(options)
         q['options'] = options
@@ -685,7 +764,13 @@ def mode_quiz(advanced=False):
     if not st.session_state.quiz_answered:
         col1, col2 = st.columns(2)
         for i, opt in enumerate(q['options']):
-            btn_label = format_japanese_answer(opt)
+            # 答えの単位
+            unit = q.get('correct_unit', '')
+            if unit == '円':
+                btn_label = format_japanese_answer(opt) + unit
+            else:
+                btn_label = f"{opt:,} {unit}"
+
             target_col = col1 if i % 2 == 0 else col2
             
             if target_col.button(f"{btn_label}", key=f"q_{st.session_state.current_q_idx}_opt_{i}", use_container_width=True):
@@ -705,15 +790,18 @@ def mode_quiz(advanced=False):
         pat = q['pattern']
         u1 = q['unit1']
         u2 = q['unit2']
+        c_unit = q.get('correct_unit', '円')
         
         calc_str_arabic = ""
         if pat == 1: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
         elif pat == 2: calc_str_arabic = f"{v1:,} × {pct}% = {correct_val:,.0f}"
         elif pat == 3: calc_str_arabic = f"{v1:,} × {v2:,} × {pct}% = {correct_val:,.0f}"
         elif pat == 4: calc_str_arabic = f"{v1:,} × {v2} = {correct_val:,.0f}"
+        elif pat == 5: calc_str_arabic = f"{v1:,} × {v2:,} = {correct_val:,.0f}"
+        elif pat == 6: calc_str_arabic = f"{v1:,} ÷ {v2:,} = {correct_val:,.0f}"
 
         f_v1 = format_japanese_answer(v1) + u1
-        f_ans = format_japanese_answer(correct_val) + "円"
+        f_ans = format_japanese_answer(correct_val) + c_unit
         calc_str_kanji = ""
         if pat == 1: 
             f_v2 = format_japanese_answer(v2) + u2
@@ -726,6 +814,10 @@ def mode_quiz(advanced=False):
         elif pat == 4: 
             f_v2 = f"{v2}{u2}"
             calc_str_kanji = f"{f_v1} × {f_v2} ＝ {f_ans}"
+        elif pat == 5: 
+            calc_str_kanji = f"{f_v1} × {v2}円 ＝ {f_ans}"
+        elif pat == 6: 
+            calc_str_kanji = f"{f_v1} ÷ {v2}円 ＝ {f_ans}"
 
         ratio = user_val / correct_val if correct_val != 0 else 0
         is_correct = (0.99 <= ratio <= 1.01)
@@ -749,6 +841,41 @@ def mode_quiz(advanced=False):
         if st.button("次の問題へ", type="primary"):
             if is_correct: st.session_state.score += 1
             next_question()
+            st.rerun()
+
+# ==========================================
+# モード3: フラッシュカード (桁感特訓)
+# ==========================================
+def mode_flashcard():
+    st.markdown("## ⚡ フラッシュカード（桁感特訓）")
+    
+    if st.button("トップに戻る"):
+        st.session_state.page = "home"
+        st.rerun()
+        
+    st.caption("エンドレスモード: タップして次々と答えを確認しましょう。")
+
+    if st.session_state.quiz_data is None:
+        st.session_state.quiz_data = generate_flashcard_data()
+        st.session_state.flash_state = "question"
+
+    q = st.session_state.quiz_data
+
+    st.markdown(f"""
+    <div class="css-card">
+        <div class="flashcard-q">{q['q_text']}</div>
+        {"<div class='flashcard-a'>" + format_japanese_answer(q['correct']) + "</div>" if st.session_state.flash_state == "answer" else ""}
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.session_state.flash_state == "question":
+        if st.button("答えを見る", type="primary", use_container_width=True):
+            st.session_state.flash_state = "answer"
+            st.rerun()
+    else:
+        if st.button("次の問題へ", type="primary", use_container_width=True):
+            st.session_state.quiz_data = None
+            st.session_state.flash_state = "question"
             st.rerun()
 
 # ==========================================
@@ -809,42 +936,6 @@ def mode_tips():
         st.rerun()
 
 # ==========================================
-# モード3: フラッシュカード (桁感特訓)
-# ==========================================
-def mode_flashcard():
-    st.markdown("## ⚡ フラッシュカード（桁感特訓）")
-    
-    if st.button("トップに戻る"):
-        st.session_state.page = "home"
-        st.rerun()
-        
-    st.caption("エンドレスモード: タップして次々と答えを確認しましょう。")
-
-    if st.session_state.quiz_data is None:
-        st.session_state.quiz_data = generate_flashcard_data()
-        st.session_state.flash_state = "question"
-
-    q = st.session_state.quiz_data
-
-    # カードコンテナ
-    st.markdown(f"""
-    <div class="css-card">
-        <div class="flashcard-q">{q['q_text']}</div>
-        {"<div class='flashcard-a'>" + format_japanese_answer(q['correct']) + "</div>" if st.session_state.flash_state == "answer" else ""}
-    </div>
-    """, unsafe_allow_html=True)
-
-    if st.session_state.flash_state == "question":
-        if st.button("答えを見る", type="primary", use_container_width=True):
-            st.session_state.flash_state = "answer"
-            st.rerun()
-    else:
-        if st.button("次の問題へ", type="primary", use_container_width=True):
-            st.session_state.quiz_data = None
-            st.session_state.flash_state = "question"
-            st.rerun()
-
-# ==========================================
 # メイン
 # ==========================================
 def main():
@@ -888,19 +979,16 @@ def main():
                 st.rerun()
             st.caption("誤差2%以内で満点。基礎は丸い数字、上級は実戦的。")
 
-        # フラッシュカード
         if st.button("⚡ フラッシュカード（桁感特訓）", use_container_width=True):
             init_game_state()
             st.session_state.page = "flashcard"
             st.rerun()
         st.caption("「100×1万」など、0の数を瞬時に把握するエンドレスモード。")
         
-        # Tipsボタン
         if st.button("💡 暗算のコツ (Tips)", use_container_width=True):
             st.session_state.page = "tips"
             st.rerun()
 
-        # ランキング表示エリア (タブ分け)
         st.write("")
         st.markdown("---")
         st.subheader("🏆 最新ランキング")
@@ -908,16 +996,12 @@ def main():
         tab1, tab2, tab3, tab4 = st.tabs(["お気軽(基礎)", "お気軽(上級)", "チャレンジ(基礎)", "チャレンジ(上級)"])
         
         with tab1:
-            st.caption("お気軽モード（基礎編）")
             display_ranking("お気軽(基礎)")
         with tab2:
-            st.caption("お気軽モード（上級編）")
             display_ranking("お気軽(上級)")
         with tab3:
-            st.caption("チャレンジモード（基礎編）")
             display_ranking("チャレンジ(基礎)")
         with tab4:
-            st.caption("チャレンジモード（上級編）")
             display_ranking("チャレンジ(上級)")
 
         st.write("")
