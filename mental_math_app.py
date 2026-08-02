@@ -162,6 +162,7 @@
                     </button>
                 </div>
 
+                <!-- 5. P&L積算シミュレーター -->
                 <div class="bg-white p-5 rounded-2xl border border-slate-200 card-shadow flex flex-col justify-between md:col-span-2">
                     <div>
                         <div class="flex items-center gap-2 mb-2">
@@ -690,18 +691,32 @@
             return v.toLocaleString();
         }
 
-        // --- 基礎編用の「丸い数字」生成ロジック ---
+        // --- 改良版: 対数スケールによる均等「丸い数字」生成ロジック ---
         function getSmartNumber(min, max, isAdvanced) {
             if (isAdvanced) {
                 return Math.floor(Math.random() * (max - min + 1)) + min;
             }
             
+            // 範囲内の桁数（power）を求める
+            let minPower = Math.floor(Math.log10(min));
+            let maxPower = Math.floor(Math.log10(max));
+            
+            // 存在し得る桁数を配列化
+            let availablePowers = [];
+            for (let p = minPower; p <= maxPower; p++) {
+                availablePowers.push(p);
+            }
+            
+            // 桁数を均等な確率で選定
+            let chosenPower = availablePowers[Math.floor(Math.random() * availablePowers.length)];
+            
+            // 豊富な暗算向き倍率候補（偏りをなくす）
+            let bases = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8];
             let candidates = [];
-            let bases = [1, 1.5, 2, 2.5, 3, 5, 7.5]; 
-            for(let power = 2; power <= 12; power++) {
-                for(let b of bases) {
-                    let val = Math.round(b * Math.pow(10, power));
-                    if(val >= min && val <= max) candidates.push(val);
+            for (let b of bases) {
+                let val = Math.round(b * Math.pow(10, chosenPower));
+                if (val >= min && val <= max) {
+                    candidates.push(val);
                 }
             }
             
@@ -709,15 +724,8 @@
                 return candidates[Math.floor(Math.random() * candidates.length)];
             }
             
-            let raw = Math.floor(Math.random() * (max - min + 1)) + min;
-            let scale = Math.pow(10, Math.floor(Math.log10(raw)));
-            let firstDigit = Math.round(raw / scale);
-            if(firstDigit >= 7) firstDigit = 10;
-            else if(firstDigit >= 4) firstDigit = 5;
-            else if(firstDigit === 3) firstDigit = 3;
-            else if(firstDigit >= 1.5) firstDigit = 2;
-            else firstDigit = 1;
-            return firstDigit * scale;
+            // フォールバック
+            return Math.floor(Math.random() * (max - min + 1)) + min;
         }
 
         function getSmartPct(min, max, isAdvanced) {
@@ -733,7 +741,7 @@
                 return Math.floor(Math.random() * (max - min + 1)) + min;
             }
             const raw = Math.floor(Math.random() * (max - min + 1)) + min;
-            if (max <= 10) return raw;
+            if (max <= 10) return raw; // タイバーツなど小範囲はそのまま
             return Math.round(raw / 5) * 5; 
         }
 
@@ -741,19 +749,19 @@
         const PROC_GEN_DB = {
             regions: ["北米", "欧州", "豪州", "東南アジア", "国内", "中東"],
             assets: [
-                { name: "洋上風力発電", unit1: "kW", range1: [10000, 100000], unit2: "円/kW", range2: [120000, 250000], type: "CAPEX" },
-                { name: "メガソーラー", unit1: "kW", range1: [5000, 50000], unit2: "円/kW", range2: [80000, 140000], type: "CAPEX" },
-                { name: "系統用蓄電池", unit1: "kWh", range1: [10000, 100000], unit2: "円/kWh", range2: [40000, 80000], type: "CAPEX" },
-                { name: "コーポレートPPA", unit1: "kWh", range1: [1000000, 50000000], unit2: "円/kWh", range2: [12, 25], type: "REVENUE" },
-                { name: "バイオマス発電", unit1: "kWh", range1: [5000000, 30000000], unit2: "円/kWh", range2: [18, 32], type: "REVENUE" },
-                { name: "水素プラント", unit1: "kg", range1: [100000, 2000000], unit2: "円/kg", range2: [500, 1200], type: "OPEX" }
+                { name: "洋上風力発電", unit1: "kW", range1: [10000, 500000], unit2: "円/kW", range2: [120000, 250000] },
+                { name: "メガソーラー", unit1: "kW", range1: [5000, 200000], unit2: "円/kW", range2: [80000, 140000] },
+                { name: "系統用蓄電池", unit1: "kWh", range1: [10000, 200000], unit2: "円/kWh", range2: [40000, 80000] },
+                { name: "コーポレートPPA", unit1: "kWh", range1: [100000, 100000000], unit2: "円/kWh", range2: [12, 25] },
+                { name: "バイオマス発電", unit1: "kWh", range1: [1000000, 50000000], unit2: "円/kWh", range2: [18, 32] },
+                { name: "水素プラント", unit1: "kg", range1: [100000, 5000000], unit2: "円/kg", range2: [500, 1200] }
             ],
             fx: [
-                { currency: "ドル", symbol: "$", rateRange: [140, 160] },
-                { currency: "ユーロ", symbol: "€", rateRange: [150, 170] },
-                { currency: "ポンド", symbol: "£", rateRange: [180, 200] },
-                { currency: "豪ドル", symbol: "A$", rateRange: [90, 110] },
-                { currency: "バーツ", symbol: "฿", rateRange: [4, 5] }
+                { currency: "ドル", rateRange: [140, 160] },
+                { currency: "ユーロ", rateRange: [150, 170] },
+                { currency: "ポンド", rateRange: [180, 200] },
+                { currency: "豪ドル", rateRange: [90, 110] },
+                { currency: "バーツ", rateRange: [4, 5] }
             ]
         };
 
@@ -805,7 +813,7 @@
                 return { qText, correct, pattern: 1, raw_val1: val1, raw_val2: val2 };
 
             } else if (pat === 1) { // 割合 (売上/簿価 × %)
-                const val1 = getSmartNumber(1000000000, 50000000000, isAdv);
+                const val1 = getSmartNumber(100000000, 100000000000, isAdv);
                 const pct = getSmartPct(10, 50, isAdv);
                 const correct = val1 * (pct / 100);
                 const label1Str = isAdv ? val1.toLocaleString() : formatNumberWithUnitLabel(val1);
@@ -818,8 +826,8 @@
                 const qText = topics[Math.floor(Math.random() * topics.length)];
                 return { qText, correct, pattern: 2, raw_val1: val1, raw_pct: pct };
 
-            } else { // 為替換算 (外貨 × レート)
-                const val1 = getSmartNumber(1000000, 50000000, isAdv);
+            } else { // 為替換算 (広範囲の外貨額 × レート)
+                const val1 = getSmartNumber(100000, 500000000, isAdv); // 10万〜5億外貨
                 const rate = getSmartRate(fxItem.rateRange[0], fxItem.rateRange[1], isAdv);
                 const correct = val1 * rate;
                 const label1Str = isAdv ? val1.toLocaleString() : formatNumberWithUnitLabel(val1);
@@ -853,12 +861,13 @@
             startTimer();
         }
 
-        // 4択選択肢の安全生成
+        // 4択選択肢の安全生成（ユニークな4選択肢を保証）
         function renderQuizOptions(correct) {
             const container = document.getElementById('quizOptionsSection');
             container.innerHTML = '';
             
             let optsSet = new Set([correct]);
+            
             if (gameState.isAdvanced) {
                 const multipliers = [0.5, 0.7, 1.5, 2.0, 3.0, 0.3, 2.5];
                 for (let m of multipliers) {
@@ -1042,9 +1051,9 @@
             currentScenario: null,
             generateQuestion() {
                 const noiseType = ["OK", "DIGIT_ERROR", "LOGIC_ERROR"][Math.floor(Math.random() * 3)];
-                const baseVal1 = getSmartNumber(1000, 50000, false); // 万kWh or kW
-                const baseVal2 = getSmartNumber(10, 50, false); // 単価
-                const trueAns = baseVal1 * baseVal2; // 万円
+                const baseVal1 = getSmartNumber(1000, 50000, false);
+                const baseVal2 = getSmartNumber(10, 50, false);
+                const trueAns = baseVal1 * baseVal2;
 
                 let text = "";
                 let exp = "";
@@ -1103,29 +1112,29 @@
                 let base = "", q = "", correct = 0, exp = "";
 
                 if (type === 0) { // 為替デルタ
-                    const fxBase = getSmartNumber(1, 10, false); // 1億ドル〜10億ドル
-                    const rateDelta = Math.floor(Math.random() * 4) + 2; // +2円〜+5円
-                    correct = parseFloat((fxBase * rateDelta).toFixed(1)); // 億円
+                    const fxBase = getSmartNumber(1, 10, false);
+                    const rateDelta = Math.floor(Math.random() * 4) + 2;
+                    correct = parseFloat((fxBase * rateDelta).toFixed(1));
                     base = `ベースライン: ドル円150円のとき、海外事業利益 ${formatJapanese(fxBase * 100000000 * 150)} (${fxBase}億ドル)`;
                     q = `ドル円が +${rateDelta}円 円安に進んだ場合の影響額（増分デルタ）は？`;
                     exp = `正解: +${correct}億円 (${fxBase}億ドル × ${rateDelta}円 = ${correct}億円)。`;
                 } else if (type === 1) { // JEPXデルタ
-                    const volume = getSmartNumber(1000, 10000, false); // 万kWh
-                    const priceDelta = (Math.floor(Math.random() * 5) + 1) * 0.5; // +0.5〜+2.5円
-                    correct = parseFloat(((volume / 10000) * priceDelta).toFixed(2)); // 億円
+                    const volume = getSmartNumber(1000, 10000, false);
+                    const priceDelta = (Math.floor(Math.random() * 5) + 1) * 0.5;
+                    correct = parseFloat(((volume / 10000) * priceDelta).toFixed(2));
                     base = `ベースライン: 年間調達量 ${formatNumberWithUnitLabel(volume * 10000)}kWh の電力事業`;
                     q = `JEPX価格が +${priceDelta}円/kWh 上昇した場合の「調達コスト増加額」は？`;
                     exp = `正解: +${correct}億円 (${formatNumberWithUnitLabel(volume * 10000)}kWh × ${priceDelta}円 = ${correct}億円)。`;
                 } else if (type === 2) { // 稼働率デルタ
-                    const revBase = getSmartNumber(50, 300, false); // 億円
-                    const dropPct = Math.floor(Math.random() * 5) + 1; // 1〜5%
+                    const revBase = getSmartNumber(50, 300, false);
+                    const dropPct = Math.floor(Math.random() * 5) + 1;
                     correct = parseFloat((revBase * (dropPct / 100)).toFixed(1));
                     base = `ベースライン: 年間売上高 ${revBase}億円（設備稼働率 100%想定）`;
                     q = `トラブルで年間稼働率が ${dropPct}% 低下した場合の「減収額」は？`;
                     exp = `正解: ${correct}億円 (${revBase}億円 × ${dropPct}% = ${correct}億円)。`;
                 } else { // 金利デルタ
-                    const debtBase = getSmartNumber(100, 1000, false); // 億円
-                    const rateUp = (Math.floor(Math.random() * 4) + 1) * 0.25; // 0.25%〜1.0%
+                    const debtBase = getSmartNumber(100, 1000, false);
+                    const rateUp = (Math.floor(Math.random() * 4) + 1) * 0.25;
                     correct = parseFloat((debtBase * (rateUp / 100)).toFixed(2));
                     base = `ベースライン: プロジェクト借入金 ${debtBase}億円`;
                     q = `ベース金利が +${rateUp}% 上昇した場合の年間の「支払利息増加額」は？`;
@@ -1175,18 +1184,18 @@
             generateProject() {
                 const type = Math.floor(Math.random() * 2);
                 if (type === 0) { // 太陽光プロジェクト
-                    const mw = (Math.floor(Math.random() * 8) + 2) * 10; // 20~90MW
-                    const unitCapex = (Math.floor(Math.random() * 6) + 15); // 15~20万円/kW
-                    const capex = (mw * 1000 * unitCapex) / 10000; // 億円
+                    const mw = (Math.floor(Math.random() * 8) + 2) * 10;
+                    const unitCapex = (Math.floor(Math.random() * 6) + 15);
+                    const capex = (mw * 1000 * unitCapex) / 10000;
 
-                    const genKwh = mw * 1000 * 1200; // 1kWあたり1200kWh
-                    const genManKwh = genKwh / 10000; // 万kWh
-                    const fitPrice = 15; // 円
-                    const revenue = (genKwh * fitPrice) / 100000000; // 億円
+                    const genKwh = mw * 1000 * 1200;
+                    const genManKwh = genKwh / 10000;
+                    const fitPrice = 15;
+                    const revenue = (genKwh * fitPrice) / 100000000;
 
-                    const opexPct = 20; // 20%
+                    const opexPct = 20;
                     const opex = parseFloat((revenue * 0.2).toFixed(1));
-                    const dep = capex / 20; // 20年定額
+                    const dep = capex / 20;
                     const opProfit = parseFloat((revenue - opex - dep).toFixed(1));
 
                     return {
@@ -1200,16 +1209,16 @@
                         ]
                     };
                 } else { // 系統用蓄電池プロジェクト
-                    const mwh = (Math.floor(Math.random() * 5) + 5) * 10; // 50~90MWh
-                    const unitPrice = 6; // 6万円/kWh
-                    const capex = (mwh * 1000 * unitPrice) / 10000; // 億円
+                    const mwh = (Math.floor(Math.random() * 5) + 5) * 10;
+                    const unitPrice = 6;
+                    const capex = (mwh * 1000 * unitPrice) / 10000;
 
                     const cycles = 500;
-                    const genManKwh = (mwh * 1000 * cycles) / 10000; // 万kWh
-                    const spread = 10; // 円
-                    const grossProfit = (genManKwh * 10000 * spread) / 100000000; // 億円
+                    const genManKwh = (mwh * 1000 * cycles) / 10000;
+                    const spread = 10;
+                    const grossProfit = (genManKwh * 10000 * spread) / 100000000;
 
-                    const opex = parseFloat((capex * 0.02).toFixed(1)); // CAPEXの2%
+                    const opex = parseFloat((capex * 0.02).toFixed(1));
                     const ebitda = parseFloat((grossProfit - opex).toFixed(1));
 
                     return {
